@@ -1,0 +1,17 @@
+# Database
+database.sqlite
+
+# Upload utenti
+uploads/*
+!uploads/.gitkeep
+
+# Cache
+cache/*
+!cache/.gitkeep
+
+# File di sistema
+.DS_Store
+Thumbs.db
+
+# Log
+*.log
