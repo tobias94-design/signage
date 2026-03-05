@@ -85,7 +85,8 @@ require_once 'includes/header.php';
                 <label>Nome profilo</label>
                 <input type="text" name="nome" placeholder="Es. Palestra Standard" required>
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-                    <input type="checkbox" name="banner_attivo" id="banner_attivo" checked style="width:auto; margin:0;">
+                    <input type="checkbox" name="banner_attivo" id="banner_attivo" checked
+                           style="width:auto; margin:0; accent-color:#e94560;">
                     <label for="banner_attivo" style="margin:0;">Banner H24 attivo</label>
                 </div>
                 <button type="submit" class="btn btn-full">+ Crea Profilo</button>
@@ -124,15 +125,18 @@ require_once 'includes/header.php';
         <div class="box">
             <h2>🎛️ <?php echo htmlspecialchars($pr_corrente['nome']); ?></h2>
             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
-                <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:#0f3460; border-radius:6px; font-size:13px;">
+                <div style="display:flex; align-items:center; gap:10px; padding:10px 14px;
+                            background:#0f3460; border-radius:6px; font-size:13px;">
                     <div style="width:10px; height:10px; border-radius:50%; background:#2ecc71;"></div>
                     <span><strong>Layer 3 — Banner:</strong> <?php echo $pr_corrente['banner_attivo'] ? 'H24 attivo ✅' : 'Disattivato ❌'; ?></span>
                 </div>
-                <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:#0f3460; border-radius:6px; font-size:13px;">
+                <div style="display:flex; align-items:center; gap:10px; padding:10px 14px;
+                            background:#0f3460; border-radius:6px; font-size:13px;">
                     <div style="width:10px; height:10px; border-radius:50%; background:#5dade2;"></div>
                     <span><strong>Layer 1 — TV:</strong> H24 attivo ✅</span>
                 </div>
-                <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:#0f3460; border-radius:6px; font-size:13px;">
+                <div style="display:flex; align-items:center; gap:10px; padding:10px 14px;
+                            background:#0f3460; border-radius:6px; font-size:13px;">
                     <div style="width:10px; height:10px; border-radius:50%; background:#c39bd3;"></div>
                     <span><strong>Layer 2 — Pubblicità:</strong> Gestita dalle regole</span>
                 </div>
@@ -141,7 +145,7 @@ require_once 'includes/header.php';
 
         <div class="box">
             <h2>+ Aggiungi Regola Pubblicità</h2>
-            <form method="POST">
+            <form method="POST" id="form-regola">
                 <input type="hidden" name="azione" value="aggiungi_regola">
                 <input type="hidden" name="profilo_id" value="<?php echo $profilo_attivo; ?>">
 
@@ -165,15 +169,16 @@ require_once 'includes/header.php';
                 <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
                     <?php foreach ($giorni_nomi as $num => $nome): ?>
                     <div>
-                        <input type="checkbox" name="giorni[]" value="<?php echo $num; ?>"
-                               id="g<?php echo $num; ?>" checked
+                        <input type="checkbox" name="giorni[]"
+                               value="<?php echo $num; ?>"
+                               id="g<?php echo $num; ?>"
+                               checked
                                style="display:none;">
                         <label for="g<?php echo $num; ?>"
-                               style="padding:6px 12px; background:#0f3460; border:1px solid #1a4a7a;
-                                      border-radius:6px; font-size:13px; cursor:pointer; user-select:none;"
-                               onclick="this.previousElementSibling.checked = !this.previousElementSibling.checked;
-                                        this.style.background = this.previousElementSibling.checked ? '#e94560' : '#0f3460';
-                                        this.style.borderColor = this.previousElementSibling.checked ? '#e94560' : '#1a4a7a';">
+                               id="label-g<?php echo $num; ?>"
+                               style="padding:6px 12px; background:#e94560; border:1px solid #e94560;
+                                      border-radius:6px; font-size:13px; cursor:pointer;
+                                      user-select:none; display:inline-block;">
                             <?php echo $nome; ?>
                         </label>
                     </div>
@@ -226,5 +231,22 @@ require_once 'includes/header.php';
     </div>
 
 </div>
+
+<script>
+document.querySelectorAll('[id^="label-g"]').forEach(label => {
+    label.addEventListener('click', function(e) {
+        e.preventDefault();
+        const input = document.getElementById(this.getAttribute('for'));
+        input.checked = !input.checked;
+        if (input.checked) {
+            this.style.background = '#e94560';
+            this.style.borderColor = '#e94560';
+        } else {
+            this.style.background = '#0f3460';
+            this.style.borderColor = '#1a4a7a';
+        }
+    });
+});
+</script>
 
 <?php require_once 'includes/footer.php'; ?>
