@@ -44,10 +44,7 @@ $club = $dispositivo['club'] ?? '';
             align-items: center;
             justify-content: center;
         }
-        #layer-tv video {
-            width: 100%; height: 100%;
-            object-fit: cover;
-        }
+        #layer-tv video { width: 100%; height: 100%; object-fit: cover; }
 
         #layer-adv {
             position: absolute;
@@ -98,18 +95,12 @@ $club = $dispositivo['club'] ?? '';
             transition: all 0.3s;
         }
 
-        .corso-item.passato {
-            opacity: 0.3;
-        }
+        .corso-item.passato { opacity: 0.3; }
 
         .corso-item.attivo {
             background: #1a0000;
             border-left: 4px solid #e94560;
             padding-left: 24px;
-        }
-
-        .corso-item.prossimo {
-            opacity: 1;
         }
 
         .corso-orario {
@@ -120,9 +111,7 @@ $club = $dispositivo['club'] ?? '';
             margin-bottom: 4px;
         }
 
-        .corso-item.attivo .corso-orario {
-            color: #e94560;
-        }
+        .corso-item.attivo .corso-orario { color: #e94560; }
 
         .corso-nome {
             font-size: 32px;
@@ -140,19 +129,31 @@ $club = $dispositivo['club'] ?? '';
             letter-spacing: 2px;
         }
 
-        .corso-item.attivo .corso-indicatore {
-            display: block;
+        .corso-item.attivo .corso-indicatore { display: block; }
+
+        /* Schermata buon allenamento */
+        #buon-allenamento {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px;
         }
 
-        #nessun-corso {
-            padding: 40px 28px;
-            color: #555;
-            font-size: 28px;
+        #buon-allenamento .emoji {
+            font-size: 60px;
+            margin-bottom: 24px;
+        }
+
+        #buon-allenamento .testo {
+            font-size: 42px;
             font-weight: bold;
-            text-align: center;
+            color: #fff;
             text-transform: uppercase;
-            letter-spacing: 2px;
-            display: none;
+            letter-spacing: 3px;
+            line-height: 1.3;
         }
 
         /* Banner */
@@ -199,8 +200,10 @@ $club = $dispositivo['club'] ?? '';
 
     <div id="colonna-corsi">
         <div id="corsi-header">In programma oggi</div>
-        <div id="corsi-lista">
-            <div id="nessun-corso">💪 Buon<br>allenamento!</div>
+        <div id="corsi-lista"></div>
+        <div id="buon-allenamento">
+            <div class="emoji">💪</div>
+            <div class="testo">Buon<br>allenamento!</div>
         </div>
     </div>
 </div>
@@ -310,21 +313,36 @@ async function caricaCorsi() {
         const oggi = GIORNI_IT[new Date().getDay()];
 
         const corsiAll = rows.map(row => {
-            const cols = row.split(',');
+            // Gestisce le virgole dentro le celle con virgolette
+            const cols = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || row.split(',');
+            const clean = cols.map(c => c ? c.trim().replace(/^"|"$/g, '') : '');
             return {
-                giorno: cols[0]?.trim().replace(/"/g, ''),
-                orario: cols[1]?.trim().replace(/"/g, ''),
-                corso:  cols[2]?.trim().replace(/"/g, ''),
-                club:   cols[3]?.trim().replace(/"/g, '')
+                giorno:  clean[0] || '',
+                orario:  clean[1] || '',
+                corso:   clean[2] || '',
+                club:    clean[3] || '',
+                durata:  parseInt(clean[4]) || 60
             };
         });
 
-        corsiOggi = corsiAll.filter(c =>
-            c.giorno === oggi &&
-            (!CLUB || c.club.toLowerCase() === CLUB.toLowerCase())
-        ).sort((a, b) => a.orario.localeCompare(b.orario));
+        const now    = new Date();
+        const oraOra = now.getHours() * 60 + now.getMinutes();
 
-        log('📅 Corsi oggi: ' + corsiOggi.length + ' club: ' + CLUB);
+        // Filtra per giorno e club e rimuove i corsi già terminati
+        corsiOggi = corsiAll.filter(c => {
+            if (c.giorno !== oggi) return false;
+            if (CLUB && c.club.toLowerCase() !== CLUB.toLowerCase()) return false;
+
+            // Calcola orario fine corso
+            const parti   = c.orario.split(':');
+            const inizioM = parseInt(parti[0]) * 60 + parseInt(parti[1]);
+            const fineM   = inizioM + c.durata;
+
+            // Mostra solo se non ancora terminato
+            return fineM > oraOra;
+        }).sort((a, b) => a.orario.localeCompare(b.orario));
+
+        log('📅 Corsi oggi: ' + corsiOggi.length + ' — club: ' + CLUB);
         aggiornaListaCorsi();
         setTimeout(caricaCorsi, 3600000);
 
@@ -335,48 +353,62 @@ async function caricaCorsi() {
 }
 
 function aggiornaListaCorsi() {
-    const lista   = document.getElementById('corsi-lista');
-    const nessuno = document.getElementById('nessun-corso');
+    const lista        = document.getElementById('corsi-lista');
+    const buonAllen    = document.getElementById('buon-allenamento');
+    const header       = document.getElementById('corsi-header');
 
-    if (!corsiOggi.length) {
-        lista.innerHTML = '';
-        nessuno.style.display = 'block';
-        lista.appendChild(nessuno);
+    const now    = new Date();
+    const oraOra = now.getHours() * 60 + now.getMinutes();
+
+    // Ricalcola corsi attivi e futuri
+    const corsiFiltrati = corsiOggi.filter(c => {
+        const parti   = c.orario.split(':');
+        const inizioM = parseInt(parti[0]) * 60 + parseInt(parti[1]);
+        const fineM   = inizioM + c.durata;
+        return fineM > oraOra;
+    });
+
+    if (!corsiFiltrati.length) {
+        // Nessun corso — mostra buon allenamento senza titolo
+        lista.style.display        = 'none';
+        header.style.display       = 'none';
+        buonAllen.style.display    = 'flex';
         return;
     }
 
-    nessuno.style.display = 'none';
+    // Ci sono corsi — mostra lista con titolo
+    lista.style.display        = 'flex';
+    lista.style.flexDirection  = 'column';
+    header.style.display       = 'block';
+    buonAllen.style.display    = 'none';
 
-    const now    = new Date();
-    const oraOra = String(now.getHours()).padStart(2,'0') + ':' +
-                   String(now.getMinutes()).padStart(2,'0');
+    let attivoIdx = -1;
 
-    let attivoIdx   = -1;
-    let prossimoIdx = -1;
-
-    corsiOggi.forEach((c, i) => {
-        if (c.orario <= oraOra) attivoIdx = i;
-        else if (prossimoIdx === -1) prossimoIdx = i;
+    corsiFiltrati.forEach((c, i) => {
+        const parti   = c.orario.split(':');
+        const inizioM = parseInt(parti[0]) * 60 + parseInt(parti[1]);
+        const fineM   = inizioM + c.durata;
+        if (inizioM <= oraOra && oraOra < fineM) attivoIdx = i;
     });
 
-    let start = Math.max(0, attivoIdx - 1);
-    let end   = Math.min(corsiOggi.length, start + 6);
-    if (end - start < 6) start = Math.max(0, end - 6);
+    // Mostra max 5 corsi
+    let start = Math.max(0, attivoIdx >= 0 ? attivoIdx - 1 : 0);
+    let end   = Math.min(corsiFiltrati.length, start + 5);
+    if (end - start < 5) start = Math.max(0, end - 5);
 
     lista.innerHTML = '';
 
     for (let i = start; i < end; i++) {
-        const c   = corsiOggi[i];
+        const c   = corsiFiltrati[i];
         const div = document.createElement('div');
         div.className = 'corso-item';
 
-        if (i === attivoIdx) {
-            div.classList.add('attivo');
-        } else if (i < attivoIdx) {
-            div.classList.add('passato');
-        } else {
-            div.classList.add('prossimo');
-        }
+        const parti   = c.orario.split(':');
+        const inizioM = parseInt(parti[0]) * 60 + parseInt(parti[1]);
+        const fineM   = inizioM + c.durata;
+        const isAttivo = inizioM <= oraOra && oraOra < fineM;
+
+        if (isAttivo) div.classList.add('attivo');
 
         div.innerHTML = `
             <div class="corso-orario">${c.orario}</div>

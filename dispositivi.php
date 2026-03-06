@@ -8,25 +8,33 @@ $messaggio = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['azione'])) {
     if ($_POST['azione'] === 'crea_dispositivo') {
-        $nome      = trim($_POST['nome']);
-        $club      = trim($_POST['club']);
+        $nome       = trim($_POST['nome']);
+        $club       = trim($_POST['club']);
         $profilo_id = !empty($_POST['profilo_id']) ? intval($_POST['profilo_id']) : null;
-        $token     = strtolower(preg_replace('/[^a-zA-Z0-9]/', '-', $club)) . '-' . substr(md5(uniqid()), 0, 6);
+        $layout     = $_POST['layout'] ?? 'standard';
+        $token      = strtolower(preg_replace('/[^a-zA-Z0-9]/', '-', $club)) . '-' . substr(md5(uniqid()), 0, 6);
         if ($nome && $club) {
-            $stmt = $db->prepare('INSERT INTO dispositivi (nome, club, token, profilo_id) VALUES (?, ?, ?, ?)');
-            $stmt->execute([$nome, $club, $token, $profilo_id]);
+            $stmt = $db->prepare('INSERT INTO dispositivi (nome, club, token, profilo_id, layout) VALUES (?, ?, ?, ?, ?)');
+            $stmt->execute([$nome, $club, $token, $profilo_id, $layout]);
             $messaggio = 'ok|Dispositivo creato!';
         }
     }
 
     if ($_POST['azione'] === 'assegna_profilo') {
         $profilo_id = intval($_POST['profilo_id']);
+        $layout     = $_POST['layout'] ?? '';
         $ids        = $_POST['dispositivi_ids'] ?? [];
         if (!empty($ids) && $profilo_id) {
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
             $params       = array_merge([$profilo_id], array_map('intval', $ids));
             $stmt         = $db->prepare("UPDATE dispositivi SET profilo_id = ? WHERE id IN ($placeholders)");
             $stmt->execute($params);
+            // Aggiorna layout se selezionato
+            if ($layout) {
+                $params2 = array_merge([$layout], array_map('intval', $ids));
+                $stmt2   = $db->prepare("UPDATE dispositivi SET layout = ? WHERE id IN ($placeholders)");
+                $stmt2->execute($params2);
+            }
             $messaggio = 'ok|Profilo assegnato a ' . count($ids) . ' dispositivo/i!';
         } else {
             $messaggio = 'errore|Seleziona almeno un dispositivo e un profilo.';
@@ -81,6 +89,11 @@ require_once 'includes/header.php';
                         <option value="<?php echo $pr['id']; ?>"><?php echo htmlspecialchars($pr['nome']); ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <label>Layout player</label>
+                    <select name="layout">
+                        <option value="standard">📺 Standard (solo TV + ADV)</option>
+                        <option value="corsi">📋 Con colonna corsi fitness</option>
+                    </select>
                     <button type="submit" class="btn btn-full">+ Aggiungi Dispositivo</button>
                 </form>
             </div>
@@ -95,18 +108,24 @@ require_once 'includes/header.php';
 
                 <!-- Assegnazione rapida -->
                 <div style="background:#16213e; border:2px solid #e94560; border-radius:10px;
-                            padding:20px 24px; margin-bottom:24px;
-                            display:flex; align-items:center; gap:16px;">
-                    <label style="margin:0; white-space:nowrap; color:#e94560; font-weight:bold;">
-                        ⚡ Assegna profilo ai selezionati:
-                    </label>
-                    <select name="profilo_id" style="margin:0; flex:1;">
-                        <option value="">-- Seleziona profilo --</option>
-                        <?php foreach ($profili as $pr): ?>
-                        <option value="<?php echo $pr['id']; ?>"><?php echo htmlspecialchars($pr['nome']); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <button type="submit" class="btn">Assegna</button>
+                            padding:20px 24px; margin-bottom:24px;">
+                    <div style="font-size:14px; color:#e94560; font-weight:bold; margin-bottom:14px;">
+                        ⚡ Assegnazione rapida ai selezionati
+                    </div>
+                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <select name="profilo_id" style="margin:0; flex:1;">
+                            <option value="">-- Seleziona profilo --</option>
+                            <?php foreach ($profili as $pr): ?>
+                            <option value="<?php echo $pr['id']; ?>"><?php echo htmlspecialchars($pr['nome']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <select name="layout" style="margin:0; flex:1;">
+                            <option value="">-- Layout invariato --</option>
+                            <option value="standard">📺 Standard</option>
+                            <option value="corsi">📋 Con corsi fitness</option>
+                        </select>
+                        <button type="submit" class="btn">Assegna</button>
+                    </div>
                 </div>
 
                 <!-- Controlli selezione -->
@@ -125,6 +144,8 @@ require_once 'includes/header.php';
                     $online = $d['stato'] === 'online' &&
                               $d['ultimo_ping'] &&
                               strtotime($d['ultimo_ping']) > strtotime('-2 minutes');
+                    $layout = $d['layout'] ?? 'standard';
+                    $player_url = '/player/' . ($layout === 'corsi' ? 'corsi' : 'index') . '.php?token=' . $d['token'];
                 ?>
                 <div id="card-<?php echo $d['id']; ?>"
                      style="background:#0f3460; border-radius:10px; padding:18px 20px;
@@ -153,7 +174,11 @@ require_once 'includes/header.php';
                             Nessun profilo
                         </span>
                     <?php endif; ?>
-                    <a href="/player/?token=<?php echo $d['token']; ?>"
+                    <span style="font-size:12px; padding:4px 10px; border-radius:20px;
+                                 background:#1a2a3a; color:#aaa; white-space:nowrap;">
+                        <?php echo $layout === 'corsi' ? '📋 Corsi' : '📺 Standard'; ?>
+                    </span>
+                    <a href="<?php echo $player_url; ?>"
                        target="_blank" class="btn btn-sm">▶</a>
                     <a href="/dispositivi.php?elimina=<?php echo $d['id']; ?>"
                        class="btn btn-sm btn-danger"

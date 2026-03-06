@@ -80,7 +80,6 @@ require_once 'includes/header.php';
                 <a href="/profili.php" class="btn btn-secondary">+ Profilo</a>
                 <a href="/dispositivi.php" class="btn btn-secondary">+ Dispositivo</a>
                 <a href="/layout.php" class="btn btn-secondary">🎨 Banner</a>
-                <a href="/player/" class="btn btn-secondary" target="_blank">▶ Player</a>
             </div>
         </div>
     </div>
@@ -96,6 +95,7 @@ require_once 'includes/header.php';
                 <th>Nome</th>
                 <th>Club</th>
                 <th>Profilo</th>
+                <th>Layout</th>
                 <th>Ultimo ping</th>
                 <th>Azioni</th>
             </tr>
@@ -103,6 +103,7 @@ require_once 'includes/header.php';
                 $online = $d['stato'] === 'online' &&
                           $d['ultimo_ping'] &&
                           strtotime($d['ultimo_ping']) > strtotime('-2 minutes');
+                $layout_url = ($d['layout'] ?? 'standard') === 'corsi' ? '/player/corsi.php' : '/player/';
             ?>
             <tr>
                 <td><span class="badge <?php echo $online ? 'badge-online' : 'badge-offline'; ?>">
@@ -117,11 +118,16 @@ require_once 'includes/header.php';
                         <span style="color:#555;">Nessuno</span>
                     <?php endif; ?>
                 </td>
+                <td>
+                    <span style="font-size:12px; color:#aaa;">
+                        <?php echo ($d['layout'] ?? 'standard') === 'corsi' ? '📋 Corsi' : '📺 Standard'; ?>
+                    </span>
+                </td>
                 <td style="color:#aaa; font-size:13px;">
                     <?php echo $d['ultimo_ping'] ? date('d/m H:i:s', strtotime($d['ultimo_ping'])) : '—'; ?>
                 </td>
                 <td>
-                    <a href="/player/?token=<?php echo $d['token']; ?>"
+                    <a href="<?php echo $layout_url; ?>?token=<?php echo $d['token']; ?>"
                        target="_blank" class="btn btn-sm">▶ Apri</a>
                 </td>
             </tr>
