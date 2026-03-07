@@ -135,10 +135,15 @@ echo json_encode($risposta);
 
 // ─── FUNZIONI ────────────────────────────────────────────────
 function getBanner($db) {
-    $rows = $db->query('SELECT chiave, valore FROM impostazioni')->fetchAll(PDO::FETCH_ASSOC);
-    $imp  = [];
-    foreach ($rows as $r) $imp[$r['chiave']] = $r['valore'];
-    return $imp;
+    $profilo = $db->query('SELECT * FROM profili LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+    if (!$profilo) return [];
+    return [
+        'banner_colore'       => $profilo['banner_colore']       ?? '#000000',
+        'banner_testo_colore' => $profilo['banner_testo_colore'] ?? '#ffffff',
+        'banner_posizione'    => $profilo['banner_posizione']    ?? 'bottom',
+        'banner_altezza'      => $profilo['banner_altezza']      ?? 80,
+        'logo'                => $profilo['logo']                ?? '',
+    ];
 }
 
 function salvaCache($file, $dati) {

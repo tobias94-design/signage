@@ -7,17 +7,18 @@ $db = getDB();
 $messaggio = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
-    $file      = $_FILES['file'];
-    $nome      = trim($_POST['nome']);
-    $durata    = intval($_POST['durata']) ?: 10;
+    $file       = $_FILES['file'];
+    $nome       = trim($_POST['nome']);
     $estensione = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     $tipi_video    = ['mp4', 'webm'];
     $tipi_immagine = ['jpg', 'jpeg', 'png', 'gif'];
 
     if (in_array($estensione, $tipi_video)) {
-        $tipo = 'video';
+        $tipo   = 'video';
+        $durata = 0; // i video durano fino a onended
     } elseif (in_array($estensione, $tipi_immagine)) {
-        $tipo = 'immagine';
+        $tipo   = 'immagine';
+        $durata = intval($_POST['durata']) ?: 10;
     } else {
         $messaggio = 'errore|Formato non supportato. Usa MP4, WEBM, JPG, PNG.';
     }
@@ -67,13 +68,13 @@ require_once 'includes/header.php';
                     <label>Nome contenuto</label>
                     <input type="text" name="nome" placeholder="Es. Spot gennaio" required>
                 </div>
-                <div>
+                <div id="campo-durata">
                     <label>Durata (secondi)</label>
                     <input type="number" name="durata" value="10" min="1" max="300">
                 </div>
                 <div>
                     <label>File (video o immagine)</label>
-                    <input type="file" name="file" accept="video/*,image/*" required>
+                    <input type="file" name="file" id="fileInput" accept="video/*,image/*" required>
                 </div>
                 <div>
                     <label>&nbsp;</label>
@@ -108,7 +109,7 @@ require_once 'includes/header.php';
                 </td>
                 <td><?php echo htmlspecialchars($c['nome']); ?></td>
                 <td><span class="badge badge-<?php echo $c['tipo']; ?>"><?php echo strtoupper($c['tipo']); ?></span></td>
-                <td><?php echo $c['durata']; ?>s</td>
+                <td><?php echo $c['tipo'] === 'video' ? '▶ intero' : $c['durata'] . 's'; ?></td>
                 <td><?php echo date('d/m/Y H:i', strtotime($c['creato_il'])); ?></td>
                 <td>
                     <a href="/contenuti.php?elimina=<?php echo $c['id']; ?>"
@@ -127,5 +128,16 @@ require_once 'includes/header.php';
 .form-grid { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 12px; align-items: end; }
 .preview { width: 80px; height: 50px; object-fit: cover; border-radius: 4px; }
 </style>
+
+<script>
+document.getElementById('fileInput').addEventListener('change', function() {
+    const file   = this.files[0];
+    const campo  = document.getElementById('campo-durata');
+    if (!file) return;
+    const ext    = file.name.split('.').pop().toLowerCase();
+    const video  = ['mp4', 'webm'].includes(ext);
+    campo.style.display = video ? 'none' : 'block';
+});
+</script>
 
 <?php require_once 'includes/footer.php'; ?>
