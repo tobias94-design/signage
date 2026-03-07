@@ -1,221 +1,282 @@
 <?php
-require_once 'includes/auth.php';
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/db.php';
 requireLogin();
-require_once 'includes/db.php';
 $db = getDB();
 
-$messaggio = '';
+$msg    = '';
+$view   = $_GET['view'] ?? 'lista'; // lista | nuovo | modifica
+$token  = $_GET['token'] ?? '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['azione'])) {
-    if ($_POST['azione'] === 'crea_dispositivo') {
-        $nome       = trim($_POST['nome']);
-        $club       = trim($_POST['club']);
-        $profilo_id = !empty($_POST['profilo_id']) ? intval($_POST['profilo_id']) : null;
+// ── AZIONI POST ─────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'nuovo') {
+        $nome      = trim($_POST['nome'] ?? '');
+        $club      = trim($_POST['club'] ?? '');
+        $layout    = $_POST['layout'] ?? 'standard';
+        $sheet_url = trim($_POST['sheet_url'] ?? '');
+        $tok       = bin2hex(random_bytes(16));
+        if ($nome) {
+            $db->prepare("INSERT INTO dispositivi (nome, club, layout, sheet_url, token) VALUES (?, ?, ?, ?, ?)")
+               ->execute([$nome, $club, $layout, $sheet_url, $tok]);
+        }
+        header('Location: dispositivi.php');
+        exit;
+    }
+
+    if ($action === 'aggiorna') {
+        $tok        = $_POST['token'] ?? '';
+        $nome       = trim($_POST['nome'] ?? '');
+        $club       = trim($_POST['club'] ?? '');
+        $profilo_id = $_POST['profilo_id'] ?? null;
         $layout     = $_POST['layout'] ?? 'standard';
-        $token      = strtolower(preg_replace('/[^a-zA-Z0-9]/', '-', $club)) . '-' . substr(md5(uniqid()), 0, 6);
-        if ($nome && $club) {
-            $stmt = $db->prepare('INSERT INTO dispositivi (nome, club, token, profilo_id, layout) VALUES (?, ?, ?, ?, ?)');
-            $stmt->execute([$nome, $club, $token, $profilo_id, $layout]);
-            $messaggio = 'ok|Dispositivo creato!';
-        }
+        $sheet_url  = trim($_POST['sheet_url'] ?? '');
+        $db->prepare("UPDATE dispositivi SET nome=?, club=?, profilo_id=?, layout=?, sheet_url=? WHERE token=?")
+           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $tok]);
+        header('Location: dispositivi.php');
+        exit;
     }
 
-    if ($_POST['azione'] === 'assegna_profilo') {
-        $profilo_id = intval($_POST['profilo_id']);
-        $layout     = $_POST['layout'] ?? '';
-        $ids        = $_POST['dispositivi_ids'] ?? [];
-        if (!empty($ids) && $profilo_id) {
-            $placeholders = implode(',', array_fill(0, count($ids), '?'));
-            $params       = array_merge([$profilo_id], array_map('intval', $ids));
-            $stmt         = $db->prepare("UPDATE dispositivi SET profilo_id = ? WHERE id IN ($placeholders)");
-            $stmt->execute($params);
-            // Aggiorna layout se selezionato
-            if ($layout) {
-                $params2 = array_merge([$layout], array_map('intval', $ids));
-                $stmt2   = $db->prepare("UPDATE dispositivi SET layout = ? WHERE id IN ($placeholders)");
-                $stmt2->execute($params2);
-            }
-            $messaggio = 'ok|Profilo assegnato a ' . count($ids) . ' dispositivo/i!';
-        } else {
-            $messaggio = 'errore|Seleziona almeno un dispositivo e un profilo.';
-        }
+    if ($action === 'elimina') {
+        $tok = $_POST['token'] ?? '';
+        $db->prepare("DELETE FROM dispositivi WHERE token=?")->execute([$tok]);
+        header('Location: dispositivi.php');
+        exit;
+    }
+
+    if ($action === 'layout_rapido') {
+        $tok    = $_POST['token'] ?? '';
+        $layout = $_POST['layout'] ?? 'standard';
+        $db->prepare("UPDATE dispositivi SET layout=? WHERE token=?")->execute([$layout, $tok]);
+        header('Location: dispositivi.php');
+        exit;
     }
 }
 
-if (isset($_GET['elimina'])) {
-    $id = intval($_GET['elimina']);
-    $db->exec("DELETE FROM dispositivi WHERE id = $id");
-    header('Location: /dispositivi.php');
-    exit;
+// ── DATI ────────────────────────────────────────────────────
+$dispositivi = $db->query("SELECT d.*, p.nome as profilo_nome FROM dispositivi d LEFT JOIN profili p ON p.id = d.profilo_id ORDER BY d.nome")->fetchAll(PDO::FETCH_ASSOC);
+$profili     = $db->query("SELECT * FROM profili ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
+
+// dispositivo da modificare
+$dev = null;
+if ($view === 'modifica' && $token) {
+    $s = $db->prepare("SELECT * FROM dispositivi WHERE token=?");
+    $s->execute([$token]);
+    $dev = $s->fetch(PDO::FETCH_ASSOC);
+    if (!$dev) { header('Location: dispositivi.php'); exit; }
 }
 
-$dispositivi = $db->query("
-    SELECT d.*, p.nome as profilo_nome
-    FROM dispositivi d
-    LEFT JOIN profili p ON p.id = d.profilo_id
-    ORDER BY d.club
-")->fetchAll(PDO::FETCH_ASSOC);
-
-$profili = $db->query('SELECT * FROM profili ORDER BY nome')->fetchAll(PDO::FETCH_ASSOC);
-
-$titolo = 'Dispositivi';
-require_once 'includes/header.php';
+require_once __DIR__ . '/includes/header.php';
 ?>
 
-<div class="container">
+<style>
+.dev-card {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+}
+.dev-card h3 { margin: 0 0 8px; font-size: 18px; color: #fff; }
+.dev-meta { font-size: 13px; color: #888; margin-bottom: 4px; }
+.dev-meta code { color: #e94560; }
+.dev-actions { margin-top: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn-sm { padding: 6px 14px; font-size: 13px; border-radius: 6px; border: none; cursor: pointer; text-decoration: none; display: inline-block; }
+.btn-green  { background: #28a745; color: #fff; }
+.btn-blue   { background: #0d6efd; color: #fff; }
+.btn-red    { background: #dc3545; color: #fff; }
+.btn-gray   { background: #444; color: #fff; }
+.btn-pink   { background: #e94560; color: #fff; }
+.form-page { max-width: 600px; margin: 0 auto; }
+.form-page h2 { margin-bottom: 24px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+.field input, .field select, .field textarea {
+    width: 100%;
+    padding: 10px 14px;
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 15px;
+}
+.field .hint { font-size: 12px; color: #666; margin-top: 4px; }
+.badge-layout {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    background: #333;
+    color: #fff;
+    margin-left: 8px;
+}
+.sheet-ok  { color: #28a745; font-size: 13px; }
+.sheet-no  { color: #e9a045; font-size: 13px; }
+.top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.top-bar h2 { margin: 0; }
+select.layout-inline {
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #fff;
+    padding: 4px 10px;
+    font-size: 13px;
+    cursor: pointer;
+}
+</style>
 
-    <?php if ($messaggio):
-        [$tipo_msg, $testo_msg] = explode('|', $messaggio);
-    ?>
-    <div class="messaggio <?php echo $tipo_msg; ?>"><?php echo $testo_msg; ?></div>
-    <?php endif; ?>
+<div style="padding: 24px;">
 
-    <div style="display:grid; grid-template-columns:320px 1fr; gap:24px;">
+<?php if ($view === 'lista'): ?>
 
-        <!-- Colonna sinistra -->
-        <div>
-            <div class="box">
-                <h2>Nuovo Dispositivo</h2>
-                <form method="POST">
-                    <input type="hidden" name="azione" value="crea_dispositivo">
-                    <label>Nome dispositivo</label>
-                    <input type="text" name="nome" placeholder="Es. TV Sala Pesi" required>
-                    <label>Club</label>
-                    <input type="text" name="club" placeholder="Es. Milano Centro" required>
-                    <label>Profilo (opzionale)</label>
-                    <select name="profilo_id">
-                        <option value="">-- Assegna dopo --</option>
-                        <?php foreach ($profili as $pr): ?>
-                        <option value="<?php echo $pr['id']; ?>"><?php echo htmlspecialchars($pr['nome']); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <label>Layout player</label>
-                    <select name="layout">
-                        <option value="standard">📺 Standard (solo TV + ADV)</option>
-                        <option value="corsi">📋 Con colonna corsi fitness</option>
-                    </select>
-                    <button type="submit" class="btn btn-full">+ Aggiungi Dispositivo</button>
-                </form>
-            </div>
-        </div>
-
-        <!-- Colonna destra -->
-        <div>
-            <?php if (!empty($dispositivi)): ?>
-
-            <form method="POST">
-                <input type="hidden" name="azione" value="assegna_profilo">
-
-                <!-- Assegnazione rapida -->
-                <div style="background:#16213e; border:2px solid #e94560; border-radius:10px;
-                            padding:20px 24px; margin-bottom:24px;">
-                    <div style="font-size:14px; color:#e94560; font-weight:bold; margin-bottom:14px;">
-                        ⚡ Assegnazione rapida ai selezionati
-                    </div>
-                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                        <select name="profilo_id" style="margin:0; flex:1;">
-                            <option value="">-- Seleziona profilo --</option>
-                            <?php foreach ($profili as $pr): ?>
-                            <option value="<?php echo $pr['id']; ?>"><?php echo htmlspecialchars($pr['nome']); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <select name="layout" style="margin:0; flex:1;">
-                            <option value="">-- Layout invariato --</option>
-                            <option value="standard">📺 Standard</option>
-                            <option value="corsi">📋 Con corsi fitness</option>
-                        </select>
-                        <button type="submit" class="btn">Assegna</button>
-                    </div>
-                </div>
-
-                <!-- Controlli selezione -->
-                <div style="display:flex; gap:10px; margin-bottom:16px;">
-                    <button type="button" onclick="selezionaTutti()"
-                            style="background:none; border:none; color:#aaa; font-size:13px; cursor:pointer; text-decoration:underline;">
-                        Seleziona tutti
-                    </button>
-                    <button type="button" onclick="deselezionaTutti()"
-                            style="background:none; border:none; color:#aaa; font-size:13px; cursor:pointer; text-decoration:underline;">
-                        Deseleziona tutti
-                    </button>
-                </div>
-
-                <?php foreach ($dispositivi as $d):
-                    $online = $d['stato'] === 'online' &&
-                              $d['ultimo_ping'] &&
-                              strtotime($d['ultimo_ping']) > strtotime('-2 minutes');
-                    $layout = $d['layout'] ?? 'standard';
-                    $player_url = '/player/' . ($layout === 'corsi' ? 'corsi' : 'index') . '.php?token=' . $d['token'];
-                ?>
-                <div id="card-<?php echo $d['id']; ?>"
-                     style="background:#0f3460; border-radius:10px; padding:18px 20px;
-                            margin-bottom:12px; display:flex; align-items:center; gap:16px;
-                            border-left:4px solid #1a4a7a; transition:border-color 0.2s;">
-                    <input type="checkbox" class="check" name="dispositivi_ids[]"
-                           value="<?php echo $d['id']; ?>"
-                           onclick="toggleCard(<?php echo $d['id']; ?>)"
-                           style="width:18px; height:18px; accent-color:#e94560; cursor:pointer;">
-                    <div style="width:10px; height:10px; border-radius:50%;
-                                background:<?php echo $online ? '#2ecc71' : '#e74c3c'; ?>; flex-shrink:0;">
-                    </div>
-                    <div style="flex:1;">
-                        <div style="font-size:15px; font-weight:bold;"><?php echo htmlspecialchars($d['nome']); ?></div>
-                        <div style="font-size:13px; color:#aaa; margin-top:2px;">🏋️ <?php echo htmlspecialchars($d['club']); ?></div>
-                        <div style="font-size:11px; color:#555; margin-top:4px; font-family:monospace;"><?php echo $d['token']; ?></div>
-                    </div>
-                    <?php if ($d['profilo_nome']): ?>
-                        <span style="font-size:12px; padding:4px 10px; border-radius:20px;
-                                     background:#1a3d2b; color:#2ecc71; white-space:nowrap;">
-                            🎛️ <?php echo htmlspecialchars($d['profilo_nome']); ?>
-                        </span>
-                    <?php else: ?>
-                        <span style="font-size:12px; padding:4px 10px; border-radius:20px;
-                                     background:#3d1a1a; color:#e74c3c; white-space:nowrap;">
-                            Nessun profilo
-                        </span>
-                    <?php endif; ?>
-                    <span style="font-size:12px; padding:4px 10px; border-radius:20px;
-                                 background:#1a2a3a; color:#aaa; white-space:nowrap;">
-                        <?php echo $layout === 'corsi' ? '📋 Corsi' : '📺 Standard'; ?>
-                    </span>
-                    <a href="<?php echo $player_url; ?>"
-                       target="_blank" class="btn btn-sm">▶</a>
-                    <a href="/dispositivi.php?elimina=<?php echo $d['id']; ?>"
-                       class="btn btn-sm btn-danger"
-                       onclick="return confirm('Eliminare questo dispositivo?')">✕</a>
-                </div>
-                <?php endforeach; ?>
-
-            </form>
-
-            <?php else: ?>
-            <div class="box">
-                <div class="vuoto">Nessun dispositivo ancora. Aggiungine uno!</div>
-            </div>
-            <?php endif; ?>
-        </div>
-
+    <!-- ── LISTA ── -->
+    <div class="top-bar">
+        <h2>Dispositivi</h2>
+        <a href="dispositivi.php?view=nuovo" class="btn-sm btn-pink">+ Nuovo dispositivo</a>
     </div>
+
+    <?php foreach ($dispositivi as $d): ?>
+    <div class="dev-card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+                <h3>
+                    <?php echo htmlspecialchars($d['nome']); ?>
+                    <span class="badge-layout"><?php echo htmlspecialchars($d['layout'] ?? 'standard'); ?></span>
+                    <?php if ($d['profilo_nome']): ?>
+                        <span class="badge-layout" style="background:#0d6efd;"><?php echo htmlspecialchars($d['profilo_nome']); ?></span>
+                    <?php endif; ?>
+                </h3>
+                <div class="dev-meta">Club: <?php echo htmlspecialchars($d['club'] ?? '—'); ?></div>
+                <div class="dev-meta">Token: <code><?php echo htmlspecialchars($d['token']); ?></code></div>
+                <div class="dev-meta">
+                    <?php if (!empty($d['sheet_url'])): ?>
+                        <span class="sheet-ok">✅ Sheet configurato</span>
+                    <?php else: ?>
+                        <span class="sheet-no">⚠️ Sheet non configurato</span>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <!-- Layout rapido -->
+            <form method="POST">
+                <input type="hidden" name="action" value="layout_rapido">
+                <input type="hidden" name="token" value="<?php echo $d['token']; ?>">
+                <select name="layout" class="layout-inline" onchange="this.form.submit()">
+                    <option value="standard" <?php echo ($d['layout'] ?? '') === 'standard' ? 'selected' : ''; ?>>Standard</option>
+                    <option value="corsi"    <?php echo ($d['layout'] ?? '') === 'corsi'    ? 'selected' : ''; ?>>Corsi Fitness</option>
+                </select>
+            </form>
+        </div>
+
+        <div class="dev-actions">
+            <?php
+            $playerUrl = ($d['layout'] ?? 'standard') === 'corsi'
+                ? 'player/corsi.php?token=' . $d['token']
+                : 'player/?token=' . $d['token'];
+            ?>
+            <a href="<?php echo $playerUrl; ?>" target="_blank" class="btn-sm btn-green">▶ Apri</a>
+            <a href="dispositivi.php?view=modifica&token=<?php echo $d['token']; ?>" class="btn-sm btn-blue">✏️ Modifica</a>
+            <form method="POST" onsubmit="return confirm('Eliminare questo dispositivo?')" style="margin:0;">
+                <input type="hidden" name="action" value="elimina">
+                <input type="hidden" name="token" value="<?php echo $d['token']; ?>">
+                <button type="submit" class="btn-sm btn-red">🗑️ Elimina</button>
+            </form>
+        </div>
+    </div>
+    <?php endforeach; ?>
+
+
+<?php elseif ($view === 'nuovo'): ?>
+
+    <!-- ── NUOVO ── -->
+    <div class="form-page">
+        <div class="top-bar">
+            <h2>Nuovo dispositivo</h2>
+            <a href="dispositivi.php" class="btn-sm btn-gray">← Torna alla lista</a>
+        </div>
+        <form method="POST">
+            <input type="hidden" name="action" value="nuovo">
+            <div class="field">
+                <label>Nome *</label>
+                <input type="text" name="nome" required placeholder="Es: TV Sala Pesi">
+            </div>
+            <div class="field">
+                <label>Club</label>
+                <input type="text" name="club" placeholder="Es: Gymnasium Milano">
+            </div>
+            <div class="field">
+                <label>Layout</label>
+                <select name="layout">
+                    <option value="standard">Standard</option>
+                    <option value="corsi">Corsi Fitness</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>URL Google Sheet Corsi</label>
+                <input type="text" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv">
+                <div class="hint">Nel foglio: File → Pubblica sul web → CSV → copia link</div>
+            </div>
+            <div style="display:flex; gap:12px; margin-top:24px;">
+                <button type="submit" class="btn-sm btn-pink">✅ Crea dispositivo</button>
+                <a href="dispositivi.php" class="btn-sm btn-gray">Annulla</a>
+            </div>
+        </form>
+    </div>
+
+
+<?php elseif ($view === 'modifica' && $dev): ?>
+
+    <!-- ── MODIFICA ── -->
+    <div class="form-page">
+        <div class="top-bar">
+            <h2>Modifica: <?php echo htmlspecialchars($dev['nome']); ?></h2>
+            <a href="dispositivi.php" class="btn-sm btn-gray">← Torna alla lista</a>
+        </div>
+        <form method="POST">
+            <input type="hidden" name="action" value="aggiorna">
+            <input type="hidden" name="token" value="<?php echo htmlspecialchars($dev['token']); ?>">
+            <div class="field">
+                <label>Nome *</label>
+                <input type="text" name="nome" required value="<?php echo htmlspecialchars($dev['nome']); ?>">
+            </div>
+            <div class="field">
+                <label>Club</label>
+                <input type="text" name="club" value="<?php echo htmlspecialchars($dev['club'] ?? ''); ?>">
+            </div>
+            <div class="field">
+                <label>Profilo playlist</label>
+                <select name="profilo_id">
+                    <option value="">— Nessuno —</option>
+                    <?php foreach ($profili as $p): ?>
+                        <option value="<?php echo $p['id']; ?>" <?php echo ($dev['profilo_id'] ?? '') == $p['id'] ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($p['nome']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="field">
+                <label>Layout</label>
+                <select name="layout">
+                    <option value="standard" <?php echo ($dev['layout'] ?? '') === 'standard' ? 'selected' : ''; ?>>Standard</option>
+                    <option value="corsi"    <?php echo ($dev['layout'] ?? '') === 'corsi'    ? 'selected' : ''; ?>>Corsi Fitness</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>URL Google Sheet Corsi</label>
+                <input type="text" name="sheet_url" value="<?php echo htmlspecialchars($dev['sheet_url'] ?? ''); ?>"
+                       placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv">
+                <div class="hint">Nel foglio: File → Pubblica sul web → CSV → copia link</div>
+            </div>
+            <div style="display:flex; gap:12px; margin-top:24px;">
+                <button type="submit" class="btn-sm btn-pink">💾 Salva modifiche</button>
+                <a href="dispositivi.php" class="btn-sm btn-gray">Annulla</a>
+            </div>
+        </form>
+    </div>
+
+<?php endif; ?>
+
 </div>
 
-<script>
-function toggleCard(id) {
-    const card = document.getElementById('card-' + id);
-    const checked = card.querySelector('.check').checked;
-    card.style.borderLeftColor = checked ? '#e94560' : '#1a4a7a';
-}
-function selezionaTutti() {
-    document.querySelectorAll('.check').forEach(c => {
-        c.checked = true;
-        document.getElementById('card-' + c.value).style.borderLeftColor = '#e94560';
-    });
-}
-function deselezionaTutti() {
-    document.querySelectorAll('.check').forEach(c => {
-        c.checked = false;
-        document.getElementById('card-' + c.value).style.borderLeftColor = '#1a4a7a';
-    });
-}
-</script>
-
-<?php require_once 'includes/footer.php'; ?>
+<?php require_once __DIR__ . '/includes/footer.php'; ?>

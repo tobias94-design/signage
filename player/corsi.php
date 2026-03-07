@@ -11,7 +11,11 @@ if (!$token) {
 $dispositivo = $db->prepare('SELECT d.*, p.nome as profilo_nome FROM dispositivi d LEFT JOIN profili p ON p.id = d.profilo_id WHERE d.token = ?');
 $dispositivo->execute([$token]);
 $dispositivo = $dispositivo->fetch(PDO::FETCH_ASSOC);
-$club = $dispositivo['club'] ?? '';
+$club      = $dispositivo['club'] ?? '';
+$sheet_url = $dispositivo['sheet_url'] ?? '';
+if (!$sheet_url) {
+    $sheet_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRMNctWV8FW0DlvPauHdGfKwAuF8wtFeSjYsazQnx9WVm1UDHcttFQTzytB66oRNg/pub?output=csv';
+}
 ?>
 <!DOCTYPE html>
 <html lang="it">
@@ -32,6 +36,7 @@ $club = $dispositivo['club'] ?? '';
         #main {
             position: absolute;
             top: 0; left: 0; right: 0;
+            height: 1080px;
             display: flex;
             flex-direction: row;
         }
@@ -43,8 +48,17 @@ $club = $dispositivo['club'] ?? '';
             display: flex;
             align-items: center;
             justify-content: center;
+            overflow: hidden;
         }
-        #layer-tv video { width: 100%; height: 100%; object-fit: cover; }
+
+        #tv-video { width: 100%; height: 100%; object-fit: cover; }
+
+        #tv-placeholder {
+            position: absolute;
+            color: #222;
+            font-size: 32px;
+            text-align: center;
+        }
 
         #layer-adv {
             position: absolute;
@@ -59,7 +73,7 @@ $club = $dispositivo['club'] ?? '';
         #adv-video { width: 100%; height: 100%; object-fit: contain; }
         #adv-immagine { width: 100%; height: 100%; object-fit: contain; display: none; }
 
-        /* Colonna corsi */
+        /* ── COLONNA CORSI ── */
         #colonna-corsi {
             width: 380px;
             background: #111;
@@ -78,12 +92,11 @@ $club = $dispositivo['club'] ?? '';
             letter-spacing: 2px;
             text-transform: uppercase;
             border-bottom: 1px solid #222;
+            flex-shrink: 0;
         }
 
         #corsi-lista {
-            flex: 1;
-            overflow: hidden;
-            display: flex;
+            display: none;
             flex-direction: column;
             justify-content: center;
             padding: 4px 0;
@@ -92,10 +105,7 @@ $club = $dispositivo['club'] ?? '';
         .corso-item {
             padding: 14px 28px;
             border-bottom: 1px solid #1a1a1a;
-            transition: all 0.3s;
         }
-
-        .corso-item.passato { opacity: 0.3; }
 
         .corso-item.attivo {
             background: #1a0000;
@@ -131,29 +141,86 @@ $club = $dispositivo['club'] ?? '';
 
         .corso-item.attivo .corso-indicatore { display: block; }
 
-        /* Schermata buon allenamento */
+        /* ── BUON ALLENAMENTO ── */
         #buon-allenamento {
             display: none;
-            flex: 1;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             text-align: center;
-            padding: 40px;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            background: linear-gradient(135deg, #000000 0%, #1a0000 25%, #8b0000 50%, #1a0000 75%, #000000 100%);
+            background-size: 400% 400%;
+            animation: gradientShift 15s ease infinite;
         }
 
-        #buon-allenamento .emoji {
-            font-size: 60px;
-            margin-bottom: 24px;
+        @keyframes gradientShift {
+            0%   { background-position: 0% 50%; }
+            50%  { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
 
-        #buon-allenamento .testo {
-            font-size: 42px;
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(60px);
+            opacity: 0.25;
+            animation: float 20s infinite ease-in-out;
+        }
+        .orb-1 {
+            width: 300px; height: 300px;
+            background: radial-gradient(circle, #e94560 0%, transparent 70%);
+            top: -10%; left: -10%;
+            animation-delay: 0s;
+        }
+        .orb-2 {
+            width: 220px; height: 220px;
+            background: radial-gradient(circle, #ff0000 0%, transparent 70%);
+            bottom: -10%; right: -10%;
+            animation-delay: 7s;
+        }
+        .orb-3 {
+            width: 260px; height: 260px;
+            background: radial-gradient(circle, #e94560 0%, transparent 70%);
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            animation-delay: 14s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25%  { transform: translate(20px, -20px) scale(1.1); }
+            50%  { transform: translate(-15px, 15px) scale(0.9); }
+            75%  { transform: translate(15px, 20px) scale(1.05); }
+        }
+
+        .buon-content {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transform: translateY(-120px);
+        }
+
+        .buon-linea {
+            width: 40px;
+            height: 3px;
+            background: #e94560;
+            margin: 14px auto;
+            box-shadow: 0 0 10px #e94560;
+        }
+
+        .buon-testo {
+            font-size: 30px;
             font-weight: bold;
             color: #fff;
             text-transform: uppercase;
-            letter-spacing: 3px;
-            line-height: 1.3;
+            letter-spacing: 4px;
+            line-height: 1.5;
+            text-shadow: 0 2px 20px rgba(233, 69, 96, 0.5);
         }
 
         /* Banner */
@@ -191,7 +258,8 @@ $club = $dispositivo['club'] ?? '';
 
 <div id="main">
     <div id="layer-tv">
-        <div id="tv-placeholder" style="color:#222; font-size:32px;">📺 In attesa segnale TV...</div>
+        <div id="tv-placeholder">📺 In attesa segnale TV...</div>
+        <video id="tv-video" autoplay playsinline muted></video>
         <div id="layer-adv">
             <video id="adv-video" preload="auto" muted playsinline autoplay></video>
             <img id="adv-immagine" src="">
@@ -202,13 +270,18 @@ $club = $dispositivo['club'] ?? '';
         <div id="corsi-header">In programma oggi</div>
         <div id="corsi-lista"></div>
         <div id="buon-allenamento">
-            <div class="emoji">💪</div>
-            <div class="testo">Buon<br>allenamento!</div>
+            <div class="orb orb-1"></div>
+            <div class="orb orb-2"></div>
+            <div class="orb orb-3"></div>
+            <div class="buon-content">
+                <div class="buon-linea"></div>
+                <div class="buon-testo">Buon<br>allenamento!</div>
+                <div class="buon-linea"></div>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Banner -->
 <div id="layer-banner">
     <img id="banner-logo" src="" style="display:none;">
     <span id="banner-testo"></span>
@@ -226,7 +299,7 @@ const TOKEN      = '<?php echo htmlspecialchars($token); ?>';
 const CLUB       = '<?php echo htmlspecialchars($club); ?>';
 const BASE_URL   = '../';
 const DEBUG_MODE = false;
-const SHEET_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRMNctWV8FW0DlvPauHdGfKwAuF8wtFeSjYsazQnx9WVm1UDHcttFQTzytB66oRNg/pub?output=csv';
+const SHEET_URL  = '<?php echo htmlspecialchars($sheet_url); ?>';
 
 const GIORNI_IT = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
 const MESI      = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
@@ -238,7 +311,6 @@ let indiceContenuto = 0;
 let contenuti       = [];
 let corsiOggi       = [];
 
-// ─── OROLOGIO ────────────────────────────────────────────────
 function aggiornaOrologio() {
     const now  = new Date();
     const ora  = String(now.getHours()).padStart(2,'0') + ':' +
@@ -250,7 +322,6 @@ function aggiornaOrologio() {
     document.getElementById('banner-data').textContent = data;
 }
 
-// ─── LOG ─────────────────────────────────────────────────────
 function log(msg) {
     if (!DEBUG_MODE) return;
     const d = document.getElementById('debug');
@@ -261,17 +332,33 @@ function log(msg) {
     if (lines.length > 10) d.innerHTML = lines.slice(0, 10).join('<br>');
 }
 
-// ─── BANNER ──────────────────────────────────────────────────
+async function avviaSegnaleTV() {
+    try {
+        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const capture = devices.find(d => d.kind === 'videoinput');
+        if (!capture) return;
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: capture.deviceId } },
+            audio: true
+        });
+        const tvVideo = document.getElementById('tv-video');
+        tvVideo.srcObject = stream;
+        tvVideo.play();
+        document.getElementById('tv-placeholder').style.display = 'none';
+    } catch (e) {
+        log('⚠️ Errore TV: ' + e.message);
+    }
+}
+
 function applicaBanner(banner) {
     const el      = document.getElementById('layer-banner');
     const altezza = parseInt(banner.banner_altezza) || 80;
-
     el.style.backgroundColor = banner.banner_colore || '#000';
     el.style.color            = banner.banner_testo_colore || '#fff';
     el.style.height           = altezza + 'px';
     el.style.padding          = '0 ' + Math.round(altezza * 0.3) + 'px';
     el.style.gap              = Math.round(altezza * 0.2) + 'px';
-
     if (banner.banner_posizione === 'top') {
         el.style.top    = '0';
         el.style.bottom = 'auto';
@@ -283,69 +370,50 @@ function applicaBanner(banner) {
         document.getElementById('main').style.marginTop = '0';
         document.getElementById('main').style.height    = (1080 - altezza) + 'px';
     }
-
     const logo = document.getElementById('banner-logo');
     if (banner.logo) {
-        logo.src           = BASE_URL + 'assets/img/' + banner.logo;
+        logo.src = BASE_URL + 'assets/img/' + banner.logo;
         logo.style.display = 'block';
         logo.style.height  = Math.round(altezza * 0.78) + 'px';
         logo.style.width   = 'auto';
     } else {
         logo.style.display = 'none';
     }
-
-    const testoEl = document.getElementById('banner-testo');
-    testoEl.textContent    = banner.banner_testo || '';
-    testoEl.style.fontSize = Math.round(altezza * 0.22) + 'px';
-
+    document.getElementById('banner-testo').textContent    = banner.banner_testo || '';
+    document.getElementById('banner-testo').style.fontSize = Math.round(altezza * 0.22) + 'px';
     document.getElementById('banner-ora').style.fontSize   = Math.round(altezza * 0.42) + 'px';
     document.getElementById('banner-data').style.fontSize  = Math.round(altezza * 0.20) + 'px';
     document.getElementById('banner-datetime').style.color = banner.banner_testo_colore || '#fff';
 }
 
-// ─── CORSI ───────────────────────────────────────────────────
 async function caricaCorsi() {
     try {
         const res  = await fetch(SHEET_URL + '&t=' + Date.now());
         const text = await res.text();
         const rows = text.trim().split('\n').slice(1);
-
         const oggi = GIORNI_IT[new Date().getDay()];
-
         const corsiAll = rows.map(row => {
-            // Gestisce le virgole dentro le celle con virgolette
-            const cols = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || row.split(',');
+            const cols  = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || row.split(',');
             const clean = cols.map(c => c ? c.trim().replace(/^"|"$/g, '') : '');
             return {
-                giorno:  clean[0] || '',
-                orario:  clean[1] || '',
-                corso:   clean[2] || '',
-                club:    clean[3] || '',
-                durata:  parseInt(clean[4]) || 60
+                giorno: clean[0] || '',
+                orario: clean[1] || '',
+                corso:  clean[2] || '',
+                club:   clean[3] || '',
+                durata: parseInt(clean[4]) || 60
             };
         });
-
         const now    = new Date();
         const oraOra = now.getHours() * 60 + now.getMinutes();
-
-        // Filtra per giorno e club e rimuove i corsi già terminati
         corsiOggi = corsiAll.filter(c => {
             if (c.giorno !== oggi) return false;
             if (CLUB && c.club.toLowerCase() !== CLUB.toLowerCase()) return false;
-
-            // Calcola orario fine corso
             const parti   = c.orario.split(':');
             const inizioM = parseInt(parti[0]) * 60 + parseInt(parti[1]);
-            const fineM   = inizioM + c.durata;
-
-            // Mostra solo se non ancora terminato
-            return fineM > oraOra;
+            return (inizioM + c.durata) > oraOra;
         }).sort((a, b) => a.orario.localeCompare(b.orario));
-
-        log('📅 Corsi oggi: ' + corsiOggi.length + ' — club: ' + CLUB);
         aggiornaListaCorsi();
         setTimeout(caricaCorsi, 3600000);
-
     } catch (e) {
         log('⚠️ Errore corsi: ' + e.message);
         setTimeout(caricaCorsi, 60000);
@@ -353,37 +421,31 @@ async function caricaCorsi() {
 }
 
 function aggiornaListaCorsi() {
-    const lista        = document.getElementById('corsi-lista');
-    const buonAllen    = document.getElementById('buon-allenamento');
-    const header       = document.getElementById('corsi-header');
+    const lista     = document.getElementById('corsi-lista');
+    const buonAllen = document.getElementById('buon-allenamento');
+    const header    = document.getElementById('corsi-header');
+    const now       = new Date();
+    const oraOra    = now.getHours() * 60 + now.getMinutes();
 
-    const now    = new Date();
-    const oraOra = now.getHours() * 60 + now.getMinutes();
-
-    // Ricalcola corsi attivi e futuri
     const corsiFiltrati = corsiOggi.filter(c => {
         const parti   = c.orario.split(':');
         const inizioM = parseInt(parti[0]) * 60 + parseInt(parti[1]);
-        const fineM   = inizioM + c.durata;
-        return fineM > oraOra;
+        return (inizioM + c.durata) > oraOra;
     });
 
     if (!corsiFiltrati.length) {
-        // Nessun corso — mostra buon allenamento senza titolo
-        lista.style.display        = 'none';
-        header.style.display       = 'none';
-        buonAllen.style.display    = 'flex';
+        lista.style.display     = 'none';
+        header.style.display    = 'none';
+        buonAllen.style.display = 'flex';
         return;
     }
 
-    // Ci sono corsi — mostra lista con titolo
-    lista.style.display        = 'flex';
-    lista.style.flexDirection  = 'column';
-    header.style.display       = 'block';
-    buonAllen.style.display    = 'none';
+    lista.style.display       = 'flex';
+    lista.style.flexDirection = 'column';
+    header.style.display      = 'block';
+    buonAllen.style.display   = 'none';
 
     let attivoIdx = -1;
-
     corsiFiltrati.forEach((c, i) => {
         const parti   = c.orario.split(':');
         const inizioM = parseInt(parti[0]) * 60 + parseInt(parti[1]);
@@ -391,26 +453,20 @@ function aggiornaListaCorsi() {
         if (inizioM <= oraOra && oraOra < fineM) attivoIdx = i;
     });
 
-    // Mostra max 5 corsi
     let start = Math.max(0, attivoIdx >= 0 ? attivoIdx - 1 : 0);
     let end   = Math.min(corsiFiltrati.length, start + 5);
     if (end - start < 5) start = Math.max(0, end - 5);
 
     lista.innerHTML = '';
-
     for (let i = start; i < end; i++) {
-        const c   = corsiFiltrati[i];
-        const div = document.createElement('div');
-        div.className = 'corso-item';
-
-        const parti   = c.orario.split(':');
-        const inizioM = parseInt(parti[0]) * 60 + parseInt(parti[1]);
-        const fineM   = inizioM + c.durata;
+        const c        = corsiFiltrati[i];
+        const parti    = c.orario.split(':');
+        const inizioM  = parseInt(parti[0]) * 60 + parseInt(parti[1]);
+        const fineM    = inizioM + c.durata;
         const isAttivo = inizioM <= oraOra && oraOra < fineM;
-
-        if (isAttivo) div.classList.add('attivo');
-
-        div.innerHTML = `
+        const div      = document.createElement('div');
+        div.className  = 'corso-item' + (isAttivo ? ' attivo' : '');
+        div.innerHTML  = `
             <div class="corso-orario">${c.orario}</div>
             <div class="corso-nome">${c.corso}</div>
             <div class="corso-indicatore">▶ IN CORSO</div>
@@ -419,64 +475,48 @@ function aggiornaListaCorsi() {
     }
 }
 
-// ─── MOSTRA TV ───────────────────────────────────────────────
 function mostraTV() {
     document.getElementById('layer-adv').style.display     = 'none';
     document.getElementById('colonna-corsi').style.display = 'flex';
     const video = document.getElementById('adv-video');
-    video.pause();
-    video.src = '';
+    video.pause(); video.src = '';
     if (advTimer) { clearTimeout(advTimer); advTimer = null; }
-    log('📺 Modalità TV attiva');
 }
 
-// ─── MOSTRA ADV ──────────────────────────────────────────────
 function mostraADV(stato) {
     contenuti       = stato.contenuti || [];
     indiceContenuto = 0;
-
     if (stato.contenuto_ora) {
         const idx = contenuti.findIndex(c => c.id === stato.contenuto_ora.id);
         if (idx >= 0) indiceContenuto = idx;
     }
-
     document.getElementById('colonna-corsi').style.display = 'none';
     document.getElementById('layer-adv').style.display     = 'flex';
-
-    log('📋 ADV — ' + stato.playlist_nome);
     mostraContenuto(indiceContenuto);
 }
 
 function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
-
     idx = idx % contenuti.length;
     indiceContenuto = idx;
-
     const c        = contenuti[idx];
     const video    = document.getElementById('adv-video');
     const immagine = document.getElementById('adv-immagine');
     const url      = BASE_URL + 'uploads/' + c.file;
-
-    log('▶ [' + (idx+1) + '/' + contenuti.length + '] ' + c.nome);
-
     if (c.tipo === 'video') {
         immagine.style.display = 'none';
         video.style.display    = 'block';
-        video.muted            = true;
-        video.volume           = 0;
-        video.defaultMuted     = true;
+        video.muted = true; video.volume = 0;
+        video.defaultMuted = true;
         video.setAttribute('muted', '');
-        video.src              = url;
-        video.load();
+        video.src = url; video.load();
         video.addEventListener('canplay', function handler() {
             video.removeEventListener('canplay', handler);
-            video.play().catch(e => log('⚠️ Autoplay: ' + e.message));
+            video.play().catch(() => {});
         });
         video.onended = () => mostraContenuto(indiceContenuto + 1);
     } else {
-        video.pause();
-        video.src              = '';
+        video.pause(); video.src = '';
         video.style.display    = 'none';
         immagine.style.display = 'block';
         immagine.src           = url;
@@ -485,46 +525,32 @@ function mostraContenuto(idx) {
     }
 }
 
-// ─── POLLING API ─────────────────────────────────────────────
 async function aggiornaDaAPI() {
     try {
         const res   = await fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&t=' + Date.now());
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const stato = await res.json();
-
-        if (stato.errore) {
-            log('❌ ' + stato.errore);
-            setTimeout(aggiornaDaAPI, 15000);
-            return;
-        }
-
+        if (stato.errore) { setTimeout(aggiornaDaAPI, 15000); return; }
         if (stato.banner) applicaBanner(stato.banner);
-
         const modalitaCambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
-
         if (stato.modalita === 'tv') {
             if (modalitaCambiata) mostraTV();
-            const tra = Math.min((stato.secondi_alla_adv || 30) * 1000, 30000);
-            setTimeout(aggiornaDaAPI, tra);
+            setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
         } else if (stato.modalita === 'adv') {
             if (modalitaCambiata) mostraADV(stato);
-            const tra = Math.min((stato.secondi_alla_tv || 60) * 1000, 30000);
-            setTimeout(aggiornaDaAPI, tra);
+            setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_tv || 60) * 1000, 30000));
         }
-
         statoCorrente = stato;
-
     } catch (e) {
-        log('⚠️ Errore: ' + e.message);
         setTimeout(aggiornaDaAPI, 15000);
     }
 }
 
-// ─── AVVIO ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     aggiornaOrologio();
     setInterval(aggiornaOrologio, 1000);
     setInterval(aggiornaListaCorsi, 60000);
+    avviaSegnaleTV();
     caricaCorsi();
     setTimeout(aggiornaDaAPI, 500);
 });

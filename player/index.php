@@ -7,6 +7,10 @@ if (!$token) {
     $primo = $db->query('SELECT token FROM dispositivi LIMIT 1')->fetch();
     $token = $primo['token'] ?? '';
 }
+
+$dispositivo = $db->prepare('SELECT d.*, p.nome as profilo_nome FROM dispositivi d LEFT JOIN profili p ON p.id = d.profilo_id WHERE d.token = ?');
+$dispositivo->execute([$token]);
+$dispositivo = $dispositivo->fetch(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="it">
@@ -33,12 +37,13 @@ if (!$token) {
             justify-content: center;
             z-index: 1;
         }
-        #layer-tv video {
+        #tv-video {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
         #tv-placeholder {
+            position: absolute;
             color: #222;
             font-size: 32px;
             text-align: center;
@@ -73,29 +78,15 @@ if (!$token) {
             z-index: 10;
             overflow: hidden;
         }
-        #banner-logo {
-            object-fit: contain;
-            flex-shrink: 0;
-        }
-        #banner-testo {
-            opacity: 0.75;
-            flex-shrink: 0;
-        }
+        #banner-logo { object-fit: contain; flex-shrink: 0; }
+        #banner-testo { opacity: 0.75; flex-shrink: 0; }
         .banner-spacer { flex: 1; }
-        #banner-datetime {
-            text-align: right;
-            line-height: 1.3;
-            flex-shrink: 0;
-        }
-        #banner-ora {
-            font-weight: bold;
-            letter-spacing: 3px;
-        }
+        #banner-datetime { text-align: right; line-height: 1.3; flex-shrink: 0; }
+        #banner-ora { font-weight: bold; letter-spacing: 3px; }
 
         #debug {
             position: absolute;
-            bottom: 10px;
-            left: 10px;
+            bottom: 10px; left: 10px;
             background: rgba(0,0,0,0.85);
             color: #0f0;
             font-size: 14px;
@@ -113,7 +104,8 @@ if (!$token) {
 
 <!-- Layer 1: TV -->
 <div id="layer-tv">
-    <div id="tv-placeholder">📺 In attesa del segnale TV...</div>
+    <div id="tv-placeholder">📺 Connessione segnale TV...</div>
+    <video id="tv-video" autoplay playsinline muted></video>
 </div>
 
 <!-- Layer 2: ADV -->
@@ -133,13 +125,12 @@ if (!$token) {
     </div>
 </div>
 
-<!-- Debug -->
 <div id="debug"></div>
 
 <script>
 const TOKEN      = '<?php echo htmlspecialchars($token); ?>';
 const BASE_URL   = '../';
-const DEBUG_MODE = false; // ← true in sviluppo, false in produzione
+const DEBUG_MODE = false;
 const GIORNI     = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
 const MESI       = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
                     'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
@@ -148,6 +139,7 @@ let statoCorrente   = null;
 let advTimer        = null;
 let indiceContenuto = 0;
 let contenuti       = [];
+let tvStream        = null;
 
 // ─── OROLOGIO ────────────────────────────────────────────────
 function aggiornaOrologio() {
@@ -170,6 +162,38 @@ function log(msg) {
     d.innerHTML = '[' + ora + '] ' + msg + '<br>' + d.innerHTML;
     const lines = d.innerHTML.split('<br>');
     if (lines.length > 10) d.innerHTML = lines.slice(0, 10).join('<br>');
+}
+
+// ─── CAPTURE CARD ────────────────────────────────────────────
+async function avviaSegnaleTV() {
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const capture = devices.find(d => d.kind === 'videoinput');
+
+        if (!capture) {
+            log('⚠️ Nessuna capture card trovata');
+            document.getElementById('tv-placeholder').textContent = '📺 Nessuna sorgente TV';
+            return;
+        }
+
+        log('📺 Capture: ' + capture.label);
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: capture.deviceId } },
+            audio: true
+        });
+
+        tvStream = stream;
+        const tvVideo = document.getElementById('tv-video');
+        tvVideo.srcObject = stream;
+        tvVideo.play();
+        document.getElementById('tv-placeholder').style.display = 'none';
+        log('✅ Segnale TV attivo');
+
+    } catch (e) {
+        log('⚠️ Errore TV: ' + e.message);
+        document.getElementById('tv-placeholder').textContent = '📺 Errore segnale TV';
+    }
 }
 
 // ─── BANNER ──────────────────────────────────────────────────
@@ -212,13 +236,13 @@ function applicaBanner(banner) {
 
 // ─── MOSTRA TV ───────────────────────────────────────────────
 function mostraTV() {
-    document.getElementById('layer-tv').style.display  = 'flex';
+    document.getElementById('layer-tv').style.zIndex  = '1';
     document.getElementById('layer-adv').style.display = 'none';
     const video = document.getElementById('adv-video');
     video.pause();
     video.src = '';
     if (advTimer) { clearTimeout(advTimer); advTimer = null; }
-    log('📺 Modalità TV attiva');
+    log('📺 Modalità TV');
 }
 
 // ─── MOSTRA ADV ──────────────────────────────────────────────
@@ -231,19 +255,15 @@ function mostraADV(stato) {
         if (idx >= 0) indiceContenuto = idx;
     }
 
-    document.getElementById('layer-tv').style.display  = 'none';
     document.getElementById('layer-adv').style.display = 'flex';
+    document.getElementById('layer-adv').style.zIndex  = '3';
 
-    log('📋 ADV — ' + stato.playlist_nome + ' (' + contenuti.length + ' contenuti)');
+    log('📋 ADV — ' + stato.playlist_nome);
     mostraContenuto(indiceContenuto);
 }
 
 function mostraContenuto(idx) {
-    if (!contenuti.length) {
-        log('⚠️ Playlist vuota, torno a TV');
-        mostraTV();
-        return;
-    }
+    if (!contenuti.length) { mostraTV(); return; }
 
     idx = idx % contenuti.length;
     indiceContenuto = idx;
@@ -253,7 +273,7 @@ function mostraContenuto(idx) {
     const immagine = document.getElementById('adv-immagine');
     const url      = BASE_URL + 'uploads/' + c.file;
 
-    log('▶ [' + (idx+1) + '/' + contenuti.length + '] ' + c.nome + ' (' + c.durata + 's)');
+    log('▶ [' + (idx+1) + '/' + contenuti.length + '] ' + c.nome);
 
     if (c.tipo === 'video') {
         immagine.style.display = 'none';
@@ -264,14 +284,11 @@ function mostraContenuto(idx) {
         video.setAttribute('muted', '');
         video.src              = url;
         video.load();
-
         video.addEventListener('canplay', function handler() {
             video.removeEventListener('canplay', handler);
             video.play().catch(e => log('⚠️ Autoplay: ' + e.message));
         });
-
         video.onended = () => mostraContenuto(indiceContenuto + 1);
-
     } else {
         video.pause();
         video.src              = '';
@@ -285,7 +302,6 @@ function mostraContenuto(idx) {
 
 // ─── POLLING API ─────────────────────────────────────────────
 async function aggiornaDaAPI() {
-    log('🔄 Controllo API...');
     try {
         const res = await fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&t=' + Date.now());
         if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -297,11 +313,24 @@ async function aggiornaDaAPI() {
             return;
         }
 
-        log('✅ Profilo: ' + (stato.profilo || '—') + ' | ' + stato.modalita.toUpperCase());
-        applicaStato(stato);
+        if (stato.banner) applicaBanner(stato.banner);
+
+        const modalitaCambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
+
+        if (stato.modalita === 'tv') {
+            if (modalitaCambiata) mostraTV();
+            const tra = Math.min((stato.secondi_alla_adv || 30) * 1000, 30000);
+            setTimeout(aggiornaDaAPI, tra);
+        } else if (stato.modalita === 'adv') {
+            if (modalitaCambiata) mostraADV(stato);
+            const tra = Math.min((stato.secondi_alla_tv || 60) * 1000, 30000);
+            setTimeout(aggiornaDaAPI, tra);
+        }
+
+        statoCorrente = stato;
 
     } catch (e) {
-        log('⚠️ WiFi assente — carico cache locale...');
+        log('⚠️ Errore: ' + e.message);
         caricaCache();
     }
 }
@@ -311,41 +340,32 @@ async function caricaCache() {
         const res = await fetch(BASE_URL + 'cache/stato-' + TOKEN + '.json?t=' + Date.now());
         if (!res.ok) throw new Error('Cache non trovata');
         const stato = await res.json();
-        log('📦 Cache caricata del ' + (stato.cache_salvata_il || '?'));
+        log('📦 Cache: ' + (stato.cache_salvata_il || '?'));
         applicaStato(stato);
     } catch (e) {
-        log('❌ Nessuna cache — modalità TV');
-        mostraTV();
+        log('❌ Nessuna cache');
         setTimeout(aggiornaDaAPI, 30000);
     }
 }
 
 function applicaStato(stato) {
     if (stato.banner) applicaBanner(stato.banner);
-
     const modalitaCambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
-
     if (stato.modalita === 'tv') {
         if (modalitaCambiata) mostraTV();
-        const tra = Math.min((stato.secondi_alla_adv || 30) * 1000, 30000);
-        log('⏱ Prossimo check tra ' + Math.round(tra/1000) + 's');
-        setTimeout(aggiornaDaAPI, tra);
-
+        setTimeout(aggiornaDaAPI, 30000);
     } else if (stato.modalita === 'adv') {
         if (modalitaCambiata) mostraADV(stato);
-        const tra = Math.min((stato.secondi_alla_tv || 60) * 1000, 30000);
-        log('⏱ Ritorno TV tra ' + Math.round(tra/1000) + 's');
-        setTimeout(aggiornaDaAPI, tra);
+        setTimeout(aggiornaDaAPI, 30000);
     }
-
     statoCorrente = stato;
 }
 
 // ─── AVVIO ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    log('🚀 Player avviato — token: ' + TOKEN);
     aggiornaOrologio();
     setInterval(aggiornaOrologio, 1000);
+    avviaSegnaleTV();
     setTimeout(aggiornaDaAPI, 500);
 });
 </script>
