@@ -256,9 +256,9 @@ require_once 'includes/header.php';
                         <input type="checkbox" name="giorni[]" value="<?php echo $num; ?>"
                                id="eg<?php echo $num; ?>" style="display:none;" checked>
                         <label for="eg<?php echo $num; ?>" id="label-eg<?php echo $num; ?>"
-                               style="padding:6px 12px; background:#e94560; border:1px solid #e94560;
-                                      border-radius:6px; font-size:13px; cursor:pointer;
-                                      user-select:none; display:inline-block;">
+                               style="padding:8px 16px; background:#e94560; border:2px solid #e94560;
+                                      border-radius:20px; font-size:13px; font-weight:600; cursor:pointer;
+                                      user-select:none; display:inline-block; color:#fff; letter-spacing:0.5px;">
                             <?php echo $nome; ?>
                         </label>
                     </div>
@@ -347,6 +347,27 @@ require_once 'includes/header.php';
     </div>
 </div>
 
+<style>
+input[type=date], input[type=time] {
+    width: 100%;
+    padding: 10px 12px;
+    background: #0f3460 !important;
+    border: 1px solid #1a4a7a !important;
+    border-radius: 6px;
+    color: #eee !important;
+    font-size: 14px;
+    margin-bottom: 12px;
+    cursor: pointer;
+}
+input[type=date]::-webkit-calendar-picker-indicator,
+input[type=time]::-webkit-calendar-picker-indicator {
+    filter: invert(0.7);
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+}
+</style>
+
 <script>
 // Toggle giorni form evento
 document.querySelectorAll('[id^="label-eg"]').forEach(label => {
@@ -354,8 +375,22 @@ document.querySelectorAll('[id^="label-eg"]').forEach(label => {
         e.preventDefault();
         const input = document.getElementById(this.getAttribute('for'));
         input.checked = !input.checked;
-        this.style.background   = input.checked ? '#e94560' : '#0f3460';
-        this.style.borderColor  = input.checked ? '#e94560' : '#1a4a7a';
+        if (input.checked) {
+            this.style.background  = '#e94560';
+            this.style.borderColor = '#e94560';
+            this.style.color       = '#ffffff';
+        } else {
+            this.style.background  = 'transparent';
+            this.style.borderColor = '#1a4a7a';
+            this.style.color       = '#aaa';
+        }
+    });
+});
+
+// Apri calendario/orario cliccando ovunque sul campo
+document.querySelectorAll('input[type=date], input[type=time]').forEach(input => {
+    input.addEventListener('click', function() {
+        try { this.showPicker(); } catch(e) {}
     });
 });
 </script>

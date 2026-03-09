@@ -17,6 +17,7 @@ $migrazioni = [
     // playlist_items — scadenza contenuto
     "ALTER TABLE playlist_items ADD COLUMN data_inizio DATE DEFAULT NULL",
     "ALTER TABLE playlist_items ADD COLUMN data_fine DATE DEFAULT NULL",
+    "ALTER TABLE profilo_regole ADD COLUMN tipo TEXT DEFAULT 'base'"
 ];
 
 $crea_eventi = "CREATE TABLE IF NOT EXISTS profilo_eventi (
