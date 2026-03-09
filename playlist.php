@@ -19,9 +19,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['azione'])) {
     if ($_POST['azione'] === 'aggiungi_item') {
         $playlist_id  = intval($_POST['playlist_id']);
         $contenuto_id = intval($_POST['contenuto_id']);
+        $data_inizio  = !empty($_POST['data_inizio']) ? $_POST['data_inizio'] : null;
+        $data_fine    = !empty($_POST['data_fine'])   ? $_POST['data_fine']   : null;
         $ordine       = intval($db->query("SELECT COUNT(*) FROM playlist_items WHERE playlist_id = $playlist_id")->fetchColumn());
-        $stmt         = $db->prepare('INSERT INTO playlist_items (playlist_id, contenuto_id, ordine) VALUES (?, ?, ?)');
-        $stmt->execute([$playlist_id, $contenuto_id, $ordine]);
+        $stmt = $db->prepare('INSERT INTO playlist_items (playlist_id, contenuto_id, ordine, data_inizio, data_fine) VALUES (?, ?, ?, ?, ?)');
+        $stmt->execute([$playlist_id, $contenuto_id, $ordine, $data_inizio, $data_fine]);
         $messaggio = 'ok|Contenuto aggiunto!';
     }
 }
@@ -53,6 +55,15 @@ if ($playlist_attiva) {
         WHERE pi.playlist_id = $playlist_attiva
         ORDER BY pi.ordine
     ")->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$oggi = date('Y-m-d');
+
+function isScaduto($item, $oggi) {
+    return !empty($item['data_fine']) && $item['data_fine'] < $oggi;
+}
+function isNonAncoraAttivo($item, $oggi) {
+    return !empty($item['data_inizio']) && $item['data_inizio'] > $oggi;
 }
 
 $titolo = 'Playlist';
@@ -104,38 +115,64 @@ require_once 'includes/header.php';
     <!-- Colonna destra -->
     <div>
         <?php if ($playlist_attiva):
-            $pl_corrente  = array_values(array_filter($playlists, fn($p) => $p['id'] == $playlist_attiva))[0];
-            $durata_totale = array_sum(array_column($items, 'durata'));
+            $pl_corrente   = array_values(array_filter($playlists, fn($p) => $p['id'] == $playlist_attiva))[0];
+            $items_attivi  = array_filter($items, fn($it) => !isScaduto($it, $oggi) && !isNonAncoraAttivo($it, $oggi));
+            $durata_totale = array_sum(array_map(fn($it) => $it['tipo'] === 'video' ? 30 : $it['durata'], $items_attivi));
         ?>
         <div class="box">
             <h2>📋 <?php echo htmlspecialchars($pl_corrente['nome']); ?></h2>
             <div style="font-size:13px; color:#aaa; margin-bottom:16px;">
-                Durata totale: <span style="color:#e94560; font-weight:bold;"><?php echo gmdate('i:s', $durata_totale); ?></span>
-                (<?php echo $durata_totale; ?> secondi)
+                Durata totale (attivi): <span style="color:#e94560; font-weight:bold;"><?php echo gmdate('i:s', $durata_totale); ?></span>
             </div>
 
-            <form method="POST" style="display:flex; gap:10px; margin-bottom:20px;">
+            <!-- Form aggiunta con date opzionali -->
+            <form method="POST" style="margin-bottom:20px;">
                 <input type="hidden" name="azione" value="aggiungi_item">
                 <input type="hidden" name="playlist_id" value="<?php echo $playlist_attiva; ?>">
-                <select name="contenuto_id" style="margin-bottom:0; flex:1;">
-                    <?php foreach ($contenuti as $c): ?>
-                    <option value="<?php echo $c['id']; ?>">
-                        <?php echo htmlspecialchars($c['nome']); ?> (<?php echo $c['durata']; ?>s)
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-                <button type="submit" class="btn" style="white-space:nowrap;">+ Aggiungi</button>
+                <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+                    <div style="flex:2; min-width:180px;">
+                        <label style="font-size:12px; color:#aaa; display:block; margin-bottom:4px;">Contenuto</label>
+                        <select name="contenuto_id" style="margin-bottom:0;">
+                            <?php foreach ($contenuti as $c): ?>
+                            <option value="<?php echo $c['id']; ?>">
+                                <?php echo htmlspecialchars($c['nome']); ?>
+                                (<?php echo $c['tipo'] === 'video' ? '▶ intero' : $c['durata'] . 's'; ?>)
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div style="flex:1; min-width:130px;">
+                        <label style="font-size:12px; color:#aaa; display:block; margin-bottom:4px;">Dal (opzionale)</label>
+                        <input type="date" name="data_inizio" style="margin-bottom:0;">
+                    </div>
+                    <div style="flex:1; min-width:130px;">
+                        <label style="font-size:12px; color:#aaa; display:block; margin-bottom:4px;">Al (opzionale)</label>
+                        <input type="date" name="data_fine" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <button type="submit" class="btn" style="white-space:nowrap;">+ Aggiungi</button>
+                    </div>
+                </div>
             </form>
 
             <?php if (empty($items)): ?>
                 <div class="vuoto">Nessun contenuto. Aggiungine uno!</div>
             <?php else: ?>
-                <?php foreach ($items as $i => $item): ?>
+                <?php foreach ($items as $i => $item):
+                    $scaduto        = isScaduto($item, $oggi);
+                    $nonAncoraAttivo = isNonAncoraAttivo($item, $oggi);
+                    $disattivo      = $scaduto || $nonAncoraAttivo;
+                    $opacita        = $disattivo ? '0.35' : '1';
+                    $durataLabel    = $item['tipo'] === 'video' ? '▶ intero' : $item['durata'] . ' secondi';
+                ?>
                 <div style="display:flex; align-items:center; gap:12px; padding:10px;
-                            background:#0f3460; border-radius:6px; margin-bottom:8px;">
+                            background:#0f3460; border-radius:6px; margin-bottom:8px;
+                            opacity:<?php echo $opacita; ?>; position:relative;">
+
                     <div style="font-size:18px; font-weight:bold; color:#e94560; width:24px; text-align:center;">
                         <?php echo $i + 1; ?>
                     </div>
+
                     <?php if ($item['tipo'] === 'immagine'): ?>
                         <img src="/uploads/<?php echo $item['file']; ?>"
                              style="width:60px; height:40px; object-fit:cover; border-radius:4px;">
@@ -143,16 +180,36 @@ require_once 'includes/header.php';
                         <video src="/uploads/<?php echo $item['file']; ?>"
                                style="width:60px; height:40px; object-fit:cover; border-radius:4px;" muted></video>
                     <?php endif; ?>
+
                     <div style="flex:1;">
-                        <div style="font-size:14px;"><?php echo htmlspecialchars($item['nome']); ?></div>
-                        <div style="font-size:12px; color:#aaa; margin-top:2px;">
-                            <span class="badge badge-<?php echo $item['tipo']; ?>"><?php echo strtoupper($item['tipo']); ?></span>
-                            &nbsp;<?php echo $item['durata']; ?> secondi
+                        <div style="font-size:14px; display:flex; align-items:center; gap:8px;">
+                            <?php echo htmlspecialchars($item['nome']); ?>
+                            <?php if ($scaduto): ?>
+                                <span style="font-size:11px; background:#7f1d1d; color:#fca5a5; padding:2px 6px; border-radius:4px;">SCADUTO</span>
+                            <?php elseif ($nonAncoraAttivo): ?>
+                                <span style="font-size:11px; background:#1c3a6e; color:#93c5fd; padding:2px 6px; border-radius:4px;">IN ATTESA</span>
+                            <?php endif; ?>
+                        </div>
+                        <div style="font-size:12px; color:#aaa; margin-top:4px; display:flex; gap:10px; flex-wrap:wrap;">
+                            <span>
+                                <span class="badge badge-<?php echo $item['tipo']; ?>"><?php echo strtoupper($item['tipo']); ?></span>
+                                &nbsp;<?php echo $durataLabel; ?>
+                            </span>
+                            <?php if ($item['data_inizio'] || $item['data_fine']): ?>
+                            <span style="color:#888;">
+                                📅
+                                <?php echo $item['data_inizio'] ? date('d/m/Y', strtotime($item['data_inizio'])) : '∞'; ?>
+                                →
+                                <?php echo $item['data_fine'] ? date('d/m/Y', strtotime($item['data_fine'])) : '∞'; ?>
+                            </span>
+                            <?php endif; ?>
                         </div>
                     </div>
+
                     <a href="/playlist.php?elimina_item=<?php echo $item['id']; ?>&p=<?php echo $playlist_attiva; ?>"
                        class="btn btn-sm btn-danger"
-                       onclick="return confirm('Rimuovere questo contenuto?')">✕</a>
+                       onclick="return confirm('Rimuovere questo contenuto?')"
+                       style="opacity:1;">✕</a>
                 </div>
                 <?php endforeach; ?>
             <?php endif; ?>

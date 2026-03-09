@@ -41,6 +41,7 @@ $profilo = $db->query("SELECT * FROM profili WHERE id = " . intval($dispositivo[
               ->fetch(PDO::FETCH_ASSOC);
 
 $giornoOggi = date('N');
+$oggi       = date('Y-m-d');
 
 $regole = $db->query("
     SELECT pr.*, p.nome as playlist_nome
@@ -69,18 +70,33 @@ if (!$regola_attiva) {
     exit;
 }
 
-$secondi_giorno  = (int)date('H') * 3600 + (int)date('i') * 60 + (int)date('s');
-$intervallo_sec  = $regola_attiva['intervallo_minuti'] * 60;
-
-$durata_playlist = (int)$db->query("
-    SELECT COALESCE(SUM(c.durata), 0)
+// Carica contenuti attivi (non scaduti, già iniziati)
+$contenuti_raw = $db->query("
+    SELECT c.*, pi.ordine, pi.data_inizio, pi.data_fine
     FROM playlist_items pi
     JOIN contenuti c ON c.id = pi.contenuto_id
-    WHERE pi.playlist_id = " . intval($regola_attiva['playlist_id'])
-)->fetchColumn();
+    WHERE pi.playlist_id = " . intval($regola_attiva['playlist_id']) . "
+    ORDER BY pi.ordine
+")->fetchAll(PDO::FETCH_ASSOC);
 
+// Filtra contenuti scaduti o non ancora attivi
+$contenuti = array_values(array_filter($contenuti_raw, function($c) use ($oggi) {
+    if (!empty($c['data_fine'])   && $c['data_fine']   < $oggi) return false;
+    if (!empty($c['data_inizio']) && $c['data_inizio'] > $oggi) return false;
+    return true;
+}));
+
+// Per i video (durata=0) usa fallback 30s solo per il calcolo scheduling
+$DURATA_VIDEO_DEFAULT = 30;
+$getDurata = function($c) use ($DURATA_VIDEO_DEFAULT) {
+    return $c['tipo'] === 'video' ? $DURATA_VIDEO_DEFAULT : (int)$c['durata'];
+};
+
+$durata_playlist = array_sum(array_map($getDurata, $contenuti));
 if ($durata_playlist === 0) $durata_playlist = 60;
 
+$secondi_giorno  = (int)date('H') * 3600 + (int)date('i') * 60 + (int)date('s');
+$intervallo_sec  = $regola_attiva['intervallo_minuti'] * 60;
 $ciclo_totale    = $intervallo_sec + $durata_playlist;
 $posizione_ciclo = $secondi_giorno % $ciclo_totale;
 
@@ -97,23 +113,16 @@ if ($posizione_ciclo < $intervallo_sec) {
     $pos_in_adv      = $posizione_ciclo - $intervallo_sec;
     $secondi_alla_tv = $durata_playlist - $pos_in_adv;
 
-    $contenuti = $db->query("
-        SELECT c.*, pi.ordine
-        FROM playlist_items pi
-        JOIN contenuti c ON c.id = pi.contenuto_id
-        WHERE pi.playlist_id = " . intval($regola_attiva['playlist_id']) . "
-        ORDER BY pi.ordine
-    ")->fetchAll(PDO::FETCH_ASSOC);
-
     $contenuto_attivo = null;
     $elapsed = 0;
     foreach ($contenuti as $c) {
-        if ($pos_in_adv >= $elapsed && $pos_in_adv < $elapsed + $c['durata']) {
+        $dur = $getDurata($c);
+        if ($pos_in_adv >= $elapsed && $pos_in_adv < $elapsed + $dur) {
             $contenuto_attivo = $c;
-            $contenuto_attivo['secondi_rimanenti'] = ($elapsed + $c['durata']) - $pos_in_adv;
+            $contenuto_attivo['secondi_rimanenti'] = ($elapsed + $dur) - $pos_in_adv;
             break;
         }
-        $elapsed += $c['durata'];
+        $elapsed += $dur;
     }
 
     $risposta = [
