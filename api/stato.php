@@ -6,97 +6,107 @@ require_once __DIR__ . '/../includes/db.php';
 $db = getDB();
 
 $token = $_GET['token'] ?? '';
-
-if (!$token) {
-    echo json_encode(['errore' => 'Token mancante']);
-    exit;
-}
+if (!$token) { echo json_encode(['errore' => 'Token mancante']); exit; }
 
 $cache_file = __DIR__ . '/../cache/stato-' . preg_replace('/[^a-z0-9\-]/', '', $token) . '.json';
 
-// Trova dispositivo
 $stmt = $db->prepare('SELECT * FROM dispositivi WHERE token = ?');
 $stmt->execute([$token]);
 $dispositivo = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$dispositivo) {
-    echo json_encode(['errore' => 'Dispositivo non trovato']);
-    exit;
-}
+if (!$dispositivo) { echo json_encode(['errore' => 'Dispositivo non trovato']); exit; }
 
-// Aggiorna ping
 $db->prepare('UPDATE dispositivi SET stato = ?, ultimo_ping = CURRENT_TIMESTAMP WHERE token = ?')
    ->execute(['online', $token]);
 
-// Nessun profilo assegnato
 if (!$dispositivo['profilo_id']) {
     $risposta = ['modalita' => 'tv', 'banner' => getBanner($db)];
     salvaCache($cache_file, $risposta);
-    echo json_encode($risposta);
-    exit;
+    echo json_encode($risposta); exit;
 }
 
-// Carica profilo
 $profilo = $db->query("SELECT * FROM profili WHERE id = " . intval($dispositivo['profilo_id']))
               ->fetch(PDO::FETCH_ASSOC);
 
-$giornoOggi = date('N');
 $oggi       = date('Y-m-d');
+$oraOra     = date('H:i');
+$giornoOggi = date('N');
 
-$regole = $db->query("
-    SELECT pr.*, p.nome as playlist_nome
-    FROM profilo_regole pr
-    JOIN playlist p ON p.id = pr.playlist_id
-    WHERE pr.profilo_id = " . intval($profilo['id'])
-)->fetchAll(PDO::FETCH_ASSOC);
-
-$regola_attiva = null;
-foreach ($regole as $r) {
-    $giorni = explode(',', $r['giorni']);
-    if (in_array($giornoOggi, $giorni)) {
-        $regola_attiva = $r;
-        break;
+// PLAYLIST BASE
+$regola_base = null;
+try {
+    $regola_base = $db->query("
+        SELECT pr.*, p.nome as playlist_nome
+        FROM profilo_regole pr
+        JOIN playlist p ON p.id = pr.playlist_id
+        WHERE pr.profilo_id = " . intval($profilo['id']) . "
+        AND pr.tipo = 'base'
+        LIMIT 1
+    ")->fetch(PDO::FETCH_ASSOC);
+} catch(Exception $e) {
+    $regole = $db->query("
+        SELECT pr.*, p.nome as playlist_nome
+        FROM profilo_regole pr
+        JOIN playlist p ON p.id = pr.playlist_id
+        WHERE pr.profilo_id = " . intval($profilo['id'])
+    )->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($regole as $r) {
+        $giorni = explode(',', $r['giorni']);
+        if (in_array($giornoOggi, $giorni)) { $regola_base = $r; break; }
     }
 }
 
-if (!$regola_attiva) {
-    $risposta = [
-        'modalita' => 'tv',
-        'banner'   => getBanner($db),
-        'profilo'  => $profilo['nome']
-    ];
+if (!$regola_base) {
+    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db), 'profilo' => $profilo['nome']];
     salvaCache($cache_file, $risposta);
-    echo json_encode($risposta);
-    exit;
+    echo json_encode($risposta); exit;
 }
 
-// Carica contenuti attivi (non scaduti, già iniziati)
-$contenuti_raw = $db->query("
-    SELECT c.*, pi.ordine, pi.data_inizio, pi.data_fine
-    FROM playlist_items pi
-    JOIN contenuti c ON c.id = pi.contenuto_id
-    WHERE pi.playlist_id = " . intval($regola_attiva['playlist_id']) . "
-    ORDER BY pi.ordine
-")->fetchAll(PDO::FETCH_ASSOC);
+// EVENTO ATTIVO ORA
+$evento_attivo = null;
+try {
+    $eventi = $db->query("
+        SELECT pe.*, p.nome as playlist_nome
+        FROM profilo_eventi pe
+        JOIN playlist p ON p.id = pe.playlist_id
+        WHERE pe.profilo_id = " . intval($profilo['id'])
+    )->fetchAll(PDO::FETCH_ASSOC);
 
-// Filtra contenuti scaduti o non ancora attivi
-$contenuti = array_values(array_filter($contenuti_raw, function($c) use ($oggi) {
-    if (!empty($c['data_fine'])   && $c['data_fine']   < $oggi) return false;
-    if (!empty($c['data_inizio']) && $c['data_inizio'] > $oggi) return false;
-    return true;
-}));
+    foreach ($eventi as $ev) {
+        if (!empty($ev['data_fine'])   && $ev['data_fine']   < $oggi) continue;
+        if (!empty($ev['data_inizio']) && $ev['data_inizio'] > $oggi) continue;
+        $giorni = explode(',', $ev['giorni']);
+        if (!in_array($giornoOggi, $giorni)) continue;
+        if ($ev['ora_inizio'] && $ev['ora_fine']) {
+            if ($oraOra < $ev['ora_inizio'] || $oraOra > $ev['ora_fine']) continue;
+        }
+        $evento_attivo = $ev;
+        break;
+    }
+} catch(Exception $e) { $evento_attivo = null; }
 
-// Per i video (durata=0) usa fallback 30s solo per il calcolo scheduling
+// CARICA E CONCATENA CONTENUTI
+$contenuti_base   = getContenutiPlaylist($db, $regola_base['playlist_id'], $oggi);
+$contenuti_evento = $evento_attivo ? getContenutiPlaylist($db, $evento_attivo['playlist_id'], $oggi) : [];
+$contenuti_tutti  = array_values(array_merge($contenuti_base, $contenuti_evento));
+
+if (empty($contenuti_tutti)) {
+    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db), 'profilo' => $profilo['nome']];
+    salvaCache($cache_file, $risposta);
+    echo json_encode($risposta); exit;
+}
+
+// SCHEDULING
 $DURATA_VIDEO_DEFAULT = 30;
 $getDurata = function($c) use ($DURATA_VIDEO_DEFAULT) {
     return $c['tipo'] === 'video' ? $DURATA_VIDEO_DEFAULT : (int)$c['durata'];
 };
 
-$durata_playlist = array_sum(array_map($getDurata, $contenuti));
+$durata_playlist = array_sum(array_map($getDurata, $contenuti_tutti));
 if ($durata_playlist === 0) $durata_playlist = 60;
 
+$intervallo_sec  = $regola_base['intervallo_minuti'] * 60;
 $secondi_giorno  = (int)date('H') * 3600 + (int)date('i') * 60 + (int)date('s');
-$intervallo_sec  = $regola_attiva['intervallo_minuti'] * 60;
 $ciclo_totale    = $intervallo_sec + $durata_playlist;
 $posizione_ciclo = $secondi_giorno % $ciclo_totale;
 
@@ -107,6 +117,7 @@ if ($posizione_ciclo < $intervallo_sec) {
         'secondi_alla_adv' => $secondi_alla_adv,
         'banner'           => getBanner($db),
         'profilo'          => $profilo['nome'],
+        'evento_attivo'    => $evento_attivo ? $evento_attivo['nome'] : null,
         'debug'            => "TV per altri {$secondi_alla_adv}s"
     ];
 } else {
@@ -115,7 +126,7 @@ if ($posizione_ciclo < $intervallo_sec) {
 
     $contenuto_attivo = null;
     $elapsed = 0;
-    foreach ($contenuti as $c) {
+    foreach ($contenuti_tutti as $c) {
         $dur = $getDurata($c);
         if ($pos_in_adv >= $elapsed && $pos_in_adv < $elapsed + $dur) {
             $contenuto_attivo = $c;
@@ -127,22 +138,37 @@ if ($posizione_ciclo < $intervallo_sec) {
 
     $risposta = [
         'modalita'        => 'adv',
-        'playlist_id'     => $regola_attiva['playlist_id'],
-        'playlist_nome'   => $regola_attiva['playlist_nome'],
-        'contenuti'       => $contenuti,
+        'playlist_nome'   => $regola_base['playlist_nome'] . ($evento_attivo ? ' + ' . $evento_attivo['nome'] : ''),
+        'contenuti'       => $contenuti_tutti,
         'contenuto_ora'   => $contenuto_attivo,
         'pos_in_adv'      => $pos_in_adv,
         'secondi_alla_tv' => $secondi_alla_tv,
         'banner'          => getBanner($db),
         'profilo'         => $profilo['nome'],
-        'debug'           => "ADV per altri {$secondi_alla_tv}s"
+        'evento_attivo'   => $evento_attivo ? $evento_attivo['nome'] : null,
+        'debug'           => "ADV per altri {$secondi_alla_tv}s" . ($evento_attivo ? " [evento: {$evento_attivo['nome']}]" : '')
     ];
 }
 
 salvaCache($cache_file, $risposta);
 echo json_encode($risposta);
 
-// ─── FUNZIONI ────────────────────────────────────────────────
+function getContenutiPlaylist($db, $playlist_id, $oggi) {
+    $rows = $db->query("
+        SELECT c.*, pi.ordine, pi.data_inizio, pi.data_fine
+        FROM playlist_items pi
+        JOIN contenuti c ON c.id = pi.contenuto_id
+        WHERE pi.playlist_id = " . intval($playlist_id) . "
+        ORDER BY pi.ordine
+    ")->fetchAll(PDO::FETCH_ASSOC);
+
+    return array_values(array_filter($rows, function($c) use ($oggi) {
+        if (!empty($c['data_fine'])   && $c['data_fine']   < $oggi) return false;
+        if (!empty($c['data_inizio']) && $c['data_inizio'] > $oggi) return false;
+        return true;
+    }));
+}
+
 function getBanner($db) {
     $profilo = $db->query('SELECT * FROM profili LIMIT 1')->fetch(PDO::FETCH_ASSOC);
     if (!$profilo) return [];
