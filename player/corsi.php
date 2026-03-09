@@ -79,52 +79,70 @@ if (!$sheet_url) {
             width: 380px; background: #111;
             display: flex; flex-direction: column;
             overflow: hidden; border-left: 2px solid #222;
+            position: relative;
         }
-        #corsi-header {
-            background: #1a1a1a; padding: 16px 28px;
-            font-size: 20px; font-weight: bold; color: #aaa;
-            letter-spacing: 2px; text-transform: uppercase;
-            border-bottom: 1px solid #222; flex-shrink: 0;
-        }
-        #corsi-lista {
-            display: none; flex-direction: column;
-            justify-content: center; padding: 4px 0;
-        }
-        .corso-item { padding: 14px 28px; border-bottom: 1px solid #1a1a1a; }
-        .corso-item.attivo { background: #1a0000; border-left: 4px solid #e94560; padding-left: 24px; }
-        .corso-orario { font-size: 26px; color: #aaa; font-weight: 300; letter-spacing: 1px; margin-bottom: 4px; }
-        .corso-item.attivo .corso-orario { color: #e94560; }
-        .corso-nome { font-size: 32px; font-weight: bold; color: #fff; text-transform: uppercase; letter-spacing: 1px; }
-        .corso-indicatore { display: none; color: #e94560; font-size: 14px; margin-top: 4px; letter-spacing: 2px; }
-        .corso-item.attivo .corso-indicatore { display: block; }
 
-        #buon-allenamento {
-            display: none; flex-direction: column;
-            align-items: center; justify-content: center;
-            text-align: center; flex: 1;
-            overflow: hidden; position: relative;
-            background: linear-gradient(135deg, #000 0%, #1a0000 25%, #8b0000 50%, #1a0000 75%, #000 100%);
-            background-size: 400% 400%;
-            animation: gradientShift 15s ease infinite;
+        /* ── WIDGET CAROUSEL ── */
+        #sidebar-widget {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column;
+            transition: opacity 0.6s ease;
         }
-        @keyframes gradientShift {
-            0%   { background-position: 0% 50%; }
-            50%  { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+        #sidebar-widget.fade-out { opacity: 0; }
+        #sidebar-widget.fade-in  { opacity: 1; }
+
+        .widget-sfondo {
+            position: absolute; inset: 0;
+            background-size: cover; background-position: center;
+            z-index: 0;
         }
-        .orb { position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.25; animation: orbFloat 20s infinite ease-in-out; }
-        .orb-1 { width:300px; height:300px; background:radial-gradient(circle,#e94560 0%,transparent 70%); top:-10%; left:-10%; }
-        .orb-2 { width:220px; height:220px; background:radial-gradient(circle,#ff0000 0%,transparent 70%); bottom:-10%; right:-10%; animation-delay:7s; }
-        .orb-3 { width:260px; height:260px; background:radial-gradient(circle,#e94560 0%,transparent 70%); top:50%; left:50%; transform:translate(-50%,-50%); animation-delay:14s; }
-        @keyframes orbFloat {
-            0%,100% { transform:translate(0,0) scale(1); }
-            25%  { transform:translate(20px,-20px) scale(1.1); }
-            50%  { transform:translate(-15px,15px) scale(0.9); }
-            75%  { transform:translate(15px,20px) scale(1.05); }
+        .widget-overlay {
+            position: absolute; inset: 0;
+            background: rgba(0,0,0,0.45); z-index: 1;
         }
-        .buon-content { position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; transform:translateY(-120px); }
-        .buon-linea { width:40px; height:3px; background:#e94560; margin:14px auto; box-shadow:0 0 10px #e94560; }
-        .buon-testo { font-size:30px; font-weight:bold; color:#fff; text-transform:uppercase; letter-spacing:4px; line-height:1.5; text-shadow:0 2px 20px rgba(233,69,96,0.5); }
+        .widget-content {
+            position: relative; z-index: 2;
+            height: 100%; display: flex; flex-direction: column;
+            padding: 28px 28px 20px;
+        }
+
+        /* Header widget */
+        .widget-header {
+            font-size: 16px; letter-spacing: 3px; text-transform: uppercase;
+            color: rgba(255,255,255,0.55); font-weight: 400;
+            border-bottom: 1px solid rgba(255,255,255,0.15);
+            padding-bottom: 14px; margin-bottom: 20px; flex-shrink: 0;
+        }
+
+        /* ── Widget COUNTDOWN ── */
+        .widget-countdown { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; }
+        .countdown-titolo { font-size: 28px; font-weight: bold; text-align: center; line-height: 1.3; }
+        .countdown-numeri { display: flex; gap: 16px; justify-content: center; margin-top: 10px; }
+        .countdown-blocco { text-align: center; }
+        .countdown-num { font-size: 64px; font-weight: 900; line-height: 1; letter-spacing: -2px; }
+        .countdown-label { font-size: 14px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.6; margin-top: 4px; }
+        .countdown-post { font-size: 32px; font-weight: bold; text-align: center; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+        /* ── Widget METEO ── */
+        .widget-meteo { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; }
+        .meteo-icona { font-size: 80px; line-height: 1; }
+        .meteo-temp { font-size: 72px; font-weight: 900; letter-spacing: -2px; }
+        .meteo-desc { font-size: 22px; opacity: 0.75; text-transform: capitalize; text-align: center; }
+        .meteo-citta { font-size: 18px; opacity: 0.55; letter-spacing: 2px; margin-top: 8px; }
+        .meteo-dettagli { display: flex; gap: 24px; margin-top: 12px; font-size: 16px; opacity: 0.65; }
+
+        /* ── Widget INFO ── */
+        .widget-info { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+        .info-icona { font-size: 56px; line-height: 1; }
+        .info-testo { font-size: 26px; line-height: 1.5; font-weight: 300; }
+
+        /* Barra progresso slide */
+        #sidebar-progress {
+            position: absolute; bottom: 0; left: 0; height: 3px;
+            background: rgba(255,255,255,0.7); z-index: 50;
+            transition: width linear;
+        }
 
         #layer-banner {
             position: absolute;
@@ -150,18 +168,15 @@ if (!$sheet_url) {
             <video id="tv-video" autoplay playsinline muted></video>
         </div>
         <div id="colonna-corsi">
-            <div id="corsi-header">In programma oggi</div>
-            <div id="corsi-lista"></div>
-            <div id="buon-allenamento">
-                <div class="orb orb-1"></div>
-                <div class="orb orb-2"></div>
-                <div class="orb orb-3"></div>
-                <div class="buon-content">
-                    <div class="buon-linea"></div>
-                    <div class="buon-testo">Buon<br>allenamento!</div>
-                    <div class="buon-linea"></div>
+            <div id="sidebar-widget">
+                <!-- Sfondo e overlay dinamici -->
+                <div class="widget-sfondo" id="widget-sfondo"></div>
+                <div class="widget-overlay" id="widget-overlay"></div>
+                <div class="widget-content" id="widget-content">
+                    <!-- Contenuto widget renderizzato da JS -->
                 </div>
             </div>
+            <div id="sidebar-progress" style="width:0%"></div>
         </div>
     </div>
 
@@ -197,6 +212,261 @@ let contenuti = [], corsiOggi = [];
 let bannerColore = '#000000', bannerTestoColore = '#ffffff';
 let modalitaAttuale = 'tv';
 
+// ── SIDEBAR CAROUSEL ──────────────────────────────────────────────
+let sidebarSlides = [];
+let sidebarIndice = 0;
+let sidebarTimer  = null;
+let meteoCache    = {};
+
+function avviaSidebar(slides) {
+    if (!slides || !slides.length) {
+        // Fallback: mostra solo corsi
+        sidebarSlides = [{ tipo:'corsi', titolo:'In programma oggi', durata:30, colore_sfondo:'#111111', colore_testo:'#ffffff', sfondo:'', contenuto:'{}' }];
+    } else {
+        sidebarSlides = slides;
+    }
+    sidebarIndice = 0;
+    mostraSlide(0);
+}
+
+function mostraSlide(idx) {
+    if (!sidebarSlides.length) return;
+    idx = idx % sidebarSlides.length;
+    sidebarIndice = idx;
+    const slide = sidebarSlides[idx];
+    const cfg = (() => { try { return JSON.parse(slide.contenuto || '{}'); } catch(e) { return {}; } })();
+
+    const widget  = document.getElementById('sidebar-widget');
+    const sfondoEl = document.getElementById('widget-sfondo');
+    const overlayEl = document.getElementById('widget-overlay');
+    const contentEl = document.getElementById('widget-content');
+
+    // Fade out
+    widget.classList.add('fade-out');
+    setTimeout(() => {
+        // Applica sfondo
+        const colTesto = slide.colore_testo || '#ffffff';
+        if (slide.sfondo) {
+            sfondoEl.style.backgroundImage = `url('${BASE_URL}uploads/${slide.sfondo}')`;
+            sfondoEl.style.backgroundColor = '';
+            overlayEl.style.display = 'block';
+        } else {
+            sfondoEl.style.backgroundImage = '';
+            sfondoEl.style.backgroundColor = slide.colore_sfondo || '#111111';
+            overlayEl.style.display = 'none';
+        }
+        contentEl.style.color = colTesto;
+
+        // Renderizza contenuto
+        switch (slide.tipo) {
+            case 'corsi':     renderCorsi(contentEl, slide, colTesto); break;
+            case 'countdown': renderCountdown(contentEl, slide, cfg, colTesto); break;
+            case 'meteo':     renderMeteo(contentEl, slide, cfg, colTesto); break;
+            case 'info':      renderInfo(contentEl, slide, cfg, colTesto); break;
+            default:          renderInfo(contentEl, slide, cfg, colTesto);
+        }
+
+        // Fade in
+        widget.classList.remove('fade-out');
+        widget.classList.add('fade-in');
+
+        // Barra progresso
+        avviaProgresso(slide.durata);
+
+        // Timer prossima slide
+        if (sidebarTimer) clearTimeout(sidebarTimer);
+        sidebarTimer = setTimeout(() => mostraSlide(sidebarIndice + 1), slide.durata * 1000);
+    }, 600);
+}
+
+function avviaProgresso(durata) {
+    const bar = document.getElementById('sidebar-progress');
+    bar.style.transition = 'none';
+    bar.style.width = '0%';
+    setTimeout(() => {
+        bar.style.transition = `width ${durata}s linear`;
+        bar.style.width = '100%';
+    }, 50);
+}
+
+// ── RENDER CORSI ─────────────────────────────────────────────────
+function renderCorsi(el, slide, colTesto) {
+    const oraOra  = new Date().getHours() * 60 + new Date().getMinutes();
+    const filtrati = corsiOggi.filter(c => {
+        const p = c.orario.split(':');
+        return (parseInt(p[0]) * 60 + parseInt(p[1]) + c.durata) > oraOra;
+    });
+
+    let html = `<div class="widget-header">${slide.titolo || 'In programma oggi'}</div>`;
+    if (!filtrati.length) {
+        html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+            <div style="font-size:48px;">💪</div>
+            <div style="font-size:28px;font-weight:bold;text-align:center;line-height:1.4;">Buon<br>allenamento!</div>
+        </div>`;
+    } else {
+        let start = 0, attivoIdx = -1;
+        filtrati.forEach((c, i) => {
+            const p = c.orario.split(':'), s = parseInt(p[0])*60 + parseInt(p[1]);
+            if (s <= oraOra && oraOra < s + c.durata) attivoIdx = i;
+        });
+        start = Math.max(0, attivoIdx >= 0 ? attivoIdx - 1 : 0);
+        const end = Math.min(filtrati.length, start + 5);
+        if (end - start < 5) start = Math.max(0, end - 5);
+
+        html += `<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:0;">`;
+        for (let i = start; i < end; i++) {
+            const c = filtrati[i];
+            const p = c.orario.split(':'), s = parseInt(p[0])*60 + parseInt(p[1]);
+            const attivo = s <= oraOra && oraOra < s + c.durata;
+            const borderStyle = attivo ? `border-left:4px solid ${colTesto}; padding-left:12px; background:rgba(255,255,255,0.08);` : 'padding-left:16px;';
+            html += `<div style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08); ${borderStyle}">
+                <div style="font-size:24px;opacity:${attivo?'1':'0.6'};font-weight:300;">${c.orario}</div>
+                <div style="font-size:28px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">${c.corso}</div>
+                ${attivo ? `<div style="font-size:12px;letter-spacing:2px;opacity:0.7;margin-top:2px;">▶ IN CORSO</div>` : ''}
+            </div>`;
+        }
+        html += `</div>`;
+    }
+    el.innerHTML = html;
+}
+
+// ── RENDER COUNTDOWN ─────────────────────────────────────────────
+function renderCountdown(el, slide, cfg, colTesto) {
+    const titolo = slide.titolo || 'Prossimo evento';
+    const dataTarget = cfg.data_target ? new Date(cfg.data_target) : null;
+    const messaggioPost = cfg.messaggio_post || 'Evento in corso!';
+
+    let html = `<div class="widget-header">${titolo}</div>
+                <div class="widget-countdown" id="countdown-content"></div>`;
+    el.innerHTML = html;
+
+    function aggiorna() {
+        const content = document.getElementById('countdown-content');
+        if (!content) return;
+        if (!dataTarget) { content.innerHTML = `<div class="countdown-post">${messaggioPost}</div>`; return; }
+        const diff = dataTarget - new Date();
+        if (diff <= 0) { content.innerHTML = `<div class="countdown-post">${messaggioPost}</div>`; return; }
+
+        const giorni = Math.floor(diff / 86400000);
+        const ore    = Math.floor((diff % 86400000) / 3600000);
+        const minuti = Math.floor((diff % 3600000) / 60000);
+        const sec    = Math.floor((diff % 60000) / 1000);
+
+        let blocchi = '';
+        if (giorni > 0) {
+            blocchi += `<div class="countdown-blocco"><div class="countdown-num">${String(giorni).padStart(2,'0')}</div><div class="countdown-label">Giorni</div></div>`;
+        }
+        blocchi += `
+            <div class="countdown-blocco"><div class="countdown-num">${String(ore).padStart(2,'0')}</div><div class="countdown-label">Ore</div></div>
+            <div class="countdown-blocco"><div class="countdown-num">${String(minuti).padStart(2,'0')}</div><div class="countdown-label">Min</div></div>
+            <div class="countdown-blocco"><div class="countdown-num">${String(sec).padStart(2,'0')}</div><div class="countdown-label">Sec</div></div>
+        `;
+
+        const dataFormatted = dataTarget.toLocaleDateString('it-IT', {day:'2-digit', month:'long', year:'numeric'});
+        content.innerHTML = `
+            <div class="countdown-titolo">${cfg.titolo_evento || titolo}</div>
+            <div class="countdown-numeri">${blocchi}</div>
+            <div style="font-size:15px;opacity:0.5;margin-top:12px;letter-spacing:1px;">${dataFormatted}</div>
+        `;
+    }
+    aggiorna();
+    const iv = setInterval(() => {
+        if (!document.getElementById('countdown-content')) { clearInterval(iv); return; }
+        aggiorna();
+    }, 1000);
+}
+
+// ── RENDER METEO ─────────────────────────────────────────────────
+const WMO_ICONS = {
+    0:'☀️', 1:'🌤️', 2:'⛅', 3:'☁️',
+    45:'🌫️', 48:'🌫️',
+    51:'🌦️', 53:'🌦️', 55:'🌧️',
+    61:'🌧️', 63:'🌧️', 65:'🌧️',
+    71:'❄️', 73:'❄️', 75:'❄️',
+    80:'🌦️', 81:'🌧️', 82:'⛈️',
+    95:'⛈️', 96:'⛈️', 99:'⛈️'
+};
+const WMO_DESC = {
+    0:'Sereno', 1:'Prevalenz. sereno', 2:'Parz. nuvoloso', 3:'Nuvoloso',
+    45:'Nebbia', 48:'Nebbia con brina',
+    51:'Pioggerella', 53:'Pioggerella', 55:'Pioggerella intensa',
+    61:'Pioggia', 63:'Pioggia', 65:'Pioggia intensa',
+    71:'Neve', 73:'Neve', 75:'Neve intensa',
+    80:'Rovesci', 81:'Rovesci', 82:'Rovesci intensi',
+    95:'Temporale', 96:'Temporale', 99:'Temporale forte'
+};
+
+async function fetchMeteo(citta, lat, lon) {
+    const key = citta || `${lat},${lon}`;
+    if (meteoCache[key] && (Date.now() - meteoCache[key].ts < 1800000)) return meteoCache[key].data;
+    try {
+        // Geocoding se no coordinate
+        let latitude = lat, longitude = lon;
+        if (!latitude || !longitude) {
+            const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(citta)}&count=1&language=it`);
+            const geoData = await geo.json();
+            if (!geoData.results?.length) return null;
+            latitude  = geoData.results[0].latitude;
+            longitude = geoData.results[0].longitude;
+        }
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weathercode,windspeed_10m,relativehumidity_2m&timezone=auto`;
+        const res  = await fetch(url);
+        const data = await res.json();
+        meteoCache[key] = { ts: Date.now(), data };
+        return data;
+    } catch(e) { return null; }
+}
+
+async function renderMeteo(el, slide, cfg, colTesto) {
+    const titolo = slide.titolo || cfg.citta || 'Meteo';
+    el.innerHTML = `<div class="widget-header">${titolo}</div>
+                    <div class="widget-meteo"><div style="font-size:40px;opacity:0.5;">Caricamento...</div></div>`;
+
+    const data = await fetchMeteo(cfg.citta, cfg.lat, cfg.lon);
+    if (!data || !data.current) {
+        el.innerHTML = `<div class="widget-header">${titolo}</div>
+                        <div class="widget-meteo"><div class="meteo-icona">🌡️</div><div style="font-size:20px;opacity:0.6;">Meteo non disponibile</div></div>`;
+        return;
+    }
+
+    const cur  = data.current;
+    const wmo  = cur.weathercode;
+    const icona = WMO_ICONS[wmo] || '🌡️';
+    const desc  = WMO_DESC[wmo]  || '';
+    const temp  = Math.round(cur.temperature_2m);
+    const umid  = cur.relativehumidity_2m;
+    const vento = Math.round(cur.windspeed_10m);
+
+    el.innerHTML = `
+        <div class="widget-header">${titolo}</div>
+        <div class="widget-meteo">
+            <div class="meteo-icona">${icona}</div>
+            <div class="meteo-temp">${temp}°C</div>
+            <div class="meteo-desc">${desc}</div>
+            <div class="meteo-citta">${cfg.citta || ''}</div>
+            <div class="meteo-dettagli">
+                <span>💧 ${umid}%</span>
+                <span>💨 ${vento} km/h</span>
+            </div>
+        </div>
+    `;
+}
+
+// ── RENDER INFO ───────────────────────────────────────────────────
+function renderInfo(el, slide, cfg, colTesto) {
+    const titolo = slide.titolo || '';
+    const icona  = cfg.icona  || 'ℹ️';
+    const testo  = cfg.testo  || '';
+    el.innerHTML = `
+        ${titolo ? `<div class="widget-header">${titolo}</div>` : ''}
+        <div class="widget-info" style="${!titolo ? 'justify-content:center;flex:1;' : ''}">
+            <div class="info-icona">${icona}</div>
+            <div class="info-testo">${testo.replace(/\n/g, '<br>')}</div>
+        </div>
+    `;
+}
+
+// ── RESTO DEL PLAYER (invariato) ─────────────────────────────────
 function adattaSchermo() {
     const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
     const root  = document.getElementById('player-root');
@@ -235,25 +505,19 @@ function applicaBanner(banner) {
     const el      = document.getElementById('layer-banner');
     const altezza = parseInt(banner.banner_altezza) || 80;
     const pos     = banner.banner_posizione || 'bottom';
-
     bannerColore      = banner.banner_colore       || '#000000';
     bannerTestoColore = banner.banner_testo_colore || '#ffffff';
-
     el.style.height  = altezza + 'px';
     el.style.padding = '0 ' + Math.round(altezza * 0.25) + 'px';
     el.style.gap     = Math.round(altezza * 0.25) + 'px';
-
     const mainEl = document.getElementById('main');
     if (pos === 'top') {
         el.style.top = '0'; el.style.bottom = 'auto';
-        mainEl.style.top    = altezza + 'px';
-        mainEl.style.height = (1080 - altezza) + 'px';
+        mainEl.style.top = altezza + 'px'; mainEl.style.height = (1080 - altezza) + 'px';
     } else {
         el.style.bottom = '0'; el.style.top = 'auto';
-        mainEl.style.top    = '0';
-        mainEl.style.height = (1080 - altezza) + 'px';
+        mainEl.style.top = '0'; mainEl.style.height = (1080 - altezza) + 'px';
     }
-
     const logo = document.getElementById('banner-logo');
     if (banner.logo) {
         logo.src = BASE_URL + 'assets/img/' + banner.logo;
@@ -261,34 +525,18 @@ function applicaBanner(banner) {
         logo.style.height  = Math.round(altezza * 0.75) + 'px';
         logo.style.width   = 'auto';
     } else { logo.style.display = 'none'; }
-
     document.getElementById('banner-ora-dx').style.fontSize      = Math.round(altezza * 0.44) + 'px';
     document.getElementById('banner-data-centro').style.fontSize = Math.round(altezza * 0.28) + 'px';
-
-    if (modalitaAttuale === 'adv') {
-        el.style.backgroundColor = 'transparent';
-        document.getElementById('banner-logo-wrap').style.visibility   = 'hidden';
-        document.getElementById('banner-data-centro').style.visibility = 'hidden';
-        document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'hidden');
-        const ora = document.getElementById('banner-ora-dx');
-        ora.style.color           = '#ffffff';
-        ora.style.textShadow      = '0 0 8px rgba(0,0,0,0.9)';
-        ora.style.backgroundColor = 'rgba(0,0,0,0.5)';
-        ora.style.borderRadius    = '6px';
-        ora.style.padding         = '4px 14px';
-    } else {
+    if (modalitaAttuale !== 'adv') {
         el.style.backgroundColor = bannerColore;
-        el.style.color            = bannerTestoColore;
+        el.style.color = bannerTestoColore;
         document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
         document.getElementById('banner-data-centro').style.visibility = 'visible';
         document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
         document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
         const ora = document.getElementById('banner-ora-dx');
-        ora.style.color           = bannerTestoColore;
-        ora.style.textShadow      = '';
-        ora.style.backgroundColor = '';
-        ora.style.borderRadius    = '';
-        ora.style.padding         = '';
+        ora.style.color = bannerTestoColore; ora.style.textShadow = '';
+        ora.style.backgroundColor = ''; ora.style.borderRadius = ''; ora.style.padding = '';
     }
 }
 
@@ -296,22 +544,16 @@ function mostraTV() {
     modalitaAttuale = 'tv';
     document.getElementById('layer-adv').style.display = 'none';
     document.getElementById('main').style.display      = 'flex';
-
     const banner = document.getElementById('layer-banner');
     banner.style.backgroundColor = bannerColore;
     document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
     document.getElementById('banner-data-centro').style.visibility = 'visible';
     document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
     document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
-
     const ora = document.getElementById('banner-ora-dx');
-    ora.style.opacity         = '1';
-    ora.style.color           = bannerTestoColore;
-    ora.style.textShadow      = '';
-    ora.style.backgroundColor = '';
-    ora.style.borderRadius    = '';
-    ora.style.padding         = '';
-
+    ora.style.opacity = '1'; ora.style.color = bannerTestoColore;
+    ora.style.textShadow = ''; ora.style.backgroundColor = '';
+    ora.style.borderRadius = ''; ora.style.padding = '';
     const video = document.getElementById('adv-video');
     video.pause(); video.src = '';
     if (advTimer) { clearTimeout(advTimer); advTimer = null; }
@@ -327,21 +569,16 @@ function mostraADV(stato) {
     }
     document.getElementById('main').style.display      = 'none';
     document.getElementById('layer-adv').style.display = 'block';
-
     const banner = document.getElementById('layer-banner');
     banner.style.backgroundColor = 'transparent';
     document.getElementById('banner-logo-wrap').style.visibility   = 'hidden';
     document.getElementById('banner-data-centro').style.visibility = 'hidden';
     document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'hidden');
-
     const ora = document.getElementById('banner-ora-dx');
-    ora.style.opacity         = '1';
-    ora.style.color           = '#ffffff';
-    ora.style.textShadow      = '0 0 8px rgba(0,0,0,0.9)';
+    ora.style.opacity = '1'; ora.style.color = '#ffffff';
+    ora.style.textShadow = '0 0 8px rgba(0,0,0,0.9)';
     ora.style.backgroundColor = 'rgba(0,0,0,0.5)';
-    ora.style.borderRadius    = '6px';
-    ora.style.padding         = '4px 14px';
-
+    ora.style.borderRadius = '6px'; ora.style.padding = '4px 14px';
     mostraContenuto(indiceContenuto);
 }
 
@@ -376,66 +613,19 @@ async function caricaCorsi() {
         const rows = text.trim().split('\n').slice(1);
         const oggi = GIORNI_IT[new Date().getDay()];
         const oraOra = new Date().getHours() * 60 + new Date().getMinutes();
-
         const corsiAll = rows.map(row => {
             const cols  = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || row.split(',');
             const clean = cols.map(c => c ? c.trim().replace(/^"|"$/g, '') : '');
             return { giorno:clean[0]||'', orario:clean[1]||'', corso:clean[2]||'', club:clean[3]||'', durata:parseInt(clean[4])||60 };
         });
-
         corsiOggi = corsiAll.filter(c => {
             if (c.giorno !== oggi) return false;
             if (CLUB && c.club.toLowerCase() !== CLUB.toLowerCase()) return false;
             const p = c.orario.split(':');
             return (parseInt(p[0]) * 60 + parseInt(p[1]) + c.durata) > oraOra;
         }).sort((a, b) => a.orario.localeCompare(b.orario));
-
-        aggiornaListaCorsi();
         setTimeout(caricaCorsi, 3600000);
     } catch(e) { setTimeout(caricaCorsi, 60000); }
-}
-
-function aggiornaListaCorsi() {
-    const lista     = document.getElementById('corsi-lista');
-    const buonAllen = document.getElementById('buon-allenamento');
-    const header    = document.getElementById('corsi-header');
-    const oraOra    = new Date().getHours() * 60 + new Date().getMinutes();
-
-    const corsiFiltrati = corsiOggi.filter(c => {
-        const p = c.orario.split(':');
-        return (parseInt(p[0]) * 60 + parseInt(p[1]) + c.durata) > oraOra;
-    });
-
-    if (!corsiFiltrati.length) {
-        lista.style.display = 'none'; header.style.display = 'none';
-        buonAllen.style.display = 'flex'; return;
-    }
-
-    lista.style.display = 'flex'; lista.style.flexDirection = 'column';
-    header.style.display = 'block'; buonAllen.style.display = 'none';
-
-    let attivoIdx = -1;
-    corsiFiltrati.forEach((c, i) => {
-        const p = c.orario.split(':'), s = parseInt(p[0]) * 60 + parseInt(p[1]);
-        if (s <= oraOra && oraOra < s + c.durata) attivoIdx = i;
-    });
-
-    let start = Math.max(0, attivoIdx >= 0 ? attivoIdx - 1 : 0);
-    let end   = Math.min(corsiFiltrati.length, start + 5);
-    if (end - start < 5) start = Math.max(0, end - 5);
-
-    lista.innerHTML = '';
-    for (let i = start; i < end; i++) {
-        const c = corsiFiltrati[i];
-        const p = c.orario.split(':'), s = parseInt(p[0]) * 60 + parseInt(p[1]);
-        const attivo = s <= oraOra && oraOra < s + c.durata;
-        const div = document.createElement('div');
-        div.className = 'corso-item' + (attivo ? ' attivo' : '');
-        div.innerHTML = `<div class="corso-orario">${c.orario}</div>
-                         <div class="corso-nome">${c.corso}</div>
-                         <div class="corso-indicatore">▶ IN CORSO</div>`;
-        lista.appendChild(div);
-    }
 }
 
 async function aggiornaDaAPI() {
@@ -445,6 +635,14 @@ async function aggiornaDaAPI() {
         const stato = await res.json();
         if (stato.errore) { setTimeout(aggiornaDaAPI, 15000); return; }
         if (stato.banner) applicaBanner(stato.banner);
+
+        // Aggiorna sidebar slides se cambiate
+        if (stato.sidebar_slides) {
+            const nuove = JSON.stringify(stato.sidebar_slides);
+            const vecchie = JSON.stringify(sidebarSlides);
+            if (nuove !== vecchie) avviaSidebar(stato.sidebar_slides);
+        }
+
         const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
         if (stato.modalita === 'tv') {
             if (cambiata) mostraTV();
@@ -462,9 +660,12 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', adattaSchermo);
     aggiornaOrologio();
     setInterval(aggiornaOrologio, 1000);
-    setInterval(aggiornaListaCorsi, 60000);
     avviaSegnaleTV();
-    caricaCorsi();
+    caricaCorsi().then(() => {
+        // Avvia sidebar con slide corsi di default finché l'API non risponde
+        avviaSidebar([{ tipo:'corsi', titolo:'In programma oggi', durata:30,
+                        colore_sfondo:'#111111', colore_testo:'#ffffff', sfondo:'', contenuto:'{}' }]);
+    });
     setTimeout(aggiornaDaAPI, 500);
 });
 </script>

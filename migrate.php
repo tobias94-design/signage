@@ -17,7 +17,8 @@ $migrazioni = [
     // playlist_items — scadenza contenuto
     "ALTER TABLE playlist_items ADD COLUMN data_inizio DATE DEFAULT NULL",
     "ALTER TABLE playlist_items ADD COLUMN data_fine DATE DEFAULT NULL",
-    "ALTER TABLE profilo_regole ADD COLUMN tipo TEXT DEFAULT 'base'"
+    // profilo_regole — tipo base/evento
+    "ALTER TABLE profilo_regole ADD COLUMN tipo TEXT DEFAULT 'base'",
 ];
 
 $crea_eventi = "CREATE TABLE IF NOT EXISTS profilo_eventi (
@@ -34,6 +35,21 @@ $crea_eventi = "CREATE TABLE IF NOT EXISTS profilo_eventi (
     creato_il     DATETIME DEFAULT CURRENT_TIMESTAMP
 )";
 
+$crea_sidebar = "CREATE TABLE IF NOT EXISTS sidebar_slides (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    profilo_id     INTEGER NOT NULL,
+    tipo           TEXT NOT NULL DEFAULT 'info',
+    titolo         TEXT DEFAULT '',
+    contenuto      TEXT DEFAULT '{}',
+    durata         INTEGER DEFAULT 10,
+    ordine         INTEGER DEFAULT 0,
+    sfondo         TEXT DEFAULT '',
+    colore_sfondo  TEXT DEFAULT '#111111',
+    colore_testo   TEXT DEFAULT '#ffffff',
+    attivo         INTEGER DEFAULT 1,
+    creato_il      DATETIME DEFAULT CURRENT_TIMESTAMP
+)";
+
 echo "<h2>Migrazione database</h2><ul>";
 foreach ($migrazioni as $sql) {
     try {
@@ -43,11 +59,13 @@ foreach ($migrazioni as $sql) {
         echo "<li style='color:gray'>– già presente: " . htmlspecialchars($sql) . "</li>";
     }
 }
-try {
-    $db->exec($crea_eventi);
-    echo "<li style='color:green'>✓ Tabella profilo_eventi creata (o già presente)</li>";
-} catch (Exception $e) {
-    echo "<li style='color:red'>✗ Errore: " . $e->getMessage() . "</li>";
+foreach ([$crea_eventi => 'profilo_eventi', $crea_sidebar => 'sidebar_slides'] as $sql => $nome) {
+    try {
+        $db->exec($sql);
+        echo "<li style='color:green'>✓ Tabella $nome creata (o già presente)</li>";
+    } catch (Exception $e) {
+        echo "<li style='color:red'>✗ Errore $nome: " . $e->getMessage() . "</li>";
+    }
 }
 echo "</ul><p><strong>Fatto!</strong></p>";
 ?>

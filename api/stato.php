@@ -115,9 +115,10 @@ if ($posizione_ciclo < $intervallo_sec) {
     $risposta = [
         'modalita'         => 'tv',
         'secondi_alla_adv' => $secondi_alla_adv,
-        'banner'           => getBanner($db),
+        'banner'           => getBanner($db, $profilo),
         'profilo'          => $profilo['nome'],
         'evento_attivo'    => $evento_attivo ? $evento_attivo['nome'] : null,
+        'sidebar_slides'   => getSidebarSlides($db, $profilo['id']),
         'debug'            => "TV per altri {$secondi_alla_adv}s"
     ];
 } else {
@@ -143,15 +144,27 @@ if ($posizione_ciclo < $intervallo_sec) {
         'contenuto_ora'   => $contenuto_attivo,
         'pos_in_adv'      => $pos_in_adv,
         'secondi_alla_tv' => $secondi_alla_tv,
-        'banner'          => getBanner($db),
+        'banner'          => getBanner($db, $profilo),
         'profilo'         => $profilo['nome'],
         'evento_attivo'   => $evento_attivo ? $evento_attivo['nome'] : null,
+        'sidebar_slides'  => getSidebarSlides($db, $profilo['id']),
         'debug'           => "ADV per altri {$secondi_alla_tv}s" . ($evento_attivo ? " [evento: {$evento_attivo['nome']}]" : '')
     ];
 }
 
 salvaCache($cache_file, $risposta);
 echo json_encode($risposta);
+
+function getSidebarSlides($db, $profilo_id) {
+    try {
+        return $db->query("
+            SELECT * FROM sidebar_slides
+            WHERE profilo_id = " . intval($profilo_id) . "
+            AND attivo = 1
+            ORDER BY ordine
+        ")->fetchAll(PDO::FETCH_ASSOC);
+    } catch(Exception $e) { return []; }
+}
 
 function getContenutiPlaylist($db, $playlist_id, $oggi) {
     $rows = $db->query("
@@ -169,8 +182,8 @@ function getContenutiPlaylist($db, $playlist_id, $oggi) {
     }));
 }
 
-function getBanner($db) {
-    $profilo = $db->query('SELECT * FROM profili LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+function getBanner($db, $profilo = null) {
+    if (!$profilo) $profilo = $db->query('SELECT * FROM profili LIMIT 1')->fetch(PDO::FETCH_ASSOC);
     if (!$profilo) return [];
     return [
         'banner_colore'       => $profilo['banner_colore']       ?? '#000000',
