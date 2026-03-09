@@ -49,7 +49,6 @@ $dispositivo = $dispositivo->fetch(PDO::FETCH_ASSOC);
             color: #222; font-size: 32px; text-align: center;
         }
 
-        /* ADV sempre 1920x1080 fissi */
         #layer-adv {
             position: absolute; top: 0; left: 0;
             width: 1920px; height: 1080px;
@@ -61,13 +60,11 @@ $dispositivo = $dispositivo->fetch(PDO::FETCH_ASSOC);
             object-fit: contain;
         }
         #adv-immagine {
-        position: absolute; top: 0; left: 0;
-        width: 1920px; height: 1080px;
-        object-fit: contain; /* ← era cover */
-        display: none;
+            position: absolute; top: 0; left: 0;
+            width: 1920px; height: 1080px;
+            object-fit: contain; display: none;
         }
 
-        /* Banner sempre sopra tutto z-index 30 */
         #layer-banner {
             position: absolute;
             left: 0; right: 0; bottom: 0;
@@ -80,7 +77,7 @@ $dispositivo = $dispositivo->fetch(PDO::FETCH_ASSOC);
         #banner-logo { object-fit:contain; display:none; }
         .banner-sep { width:1px; background:rgba(255,255,255,0.3); align-self:stretch; margin:14px 0; flex-shrink:0; }
         #banner-data-centro { flex:1; text-align:center; font-weight:500; letter-spacing:2px; }
-        #banner-ora-dx { font-weight:bold; letter-spacing:3px; flex-shrink:0; text-align:right; font-variant-numeric:tabular-nums; }
+        #banner-ora-dx { font-weight:bold; letter-spacing:3px; flex-shrink:0; text-align:right; font-variant-numeric:tabular-nums; transition: all 0.3s; }
     </style>
 </head>
 <body>
@@ -118,6 +115,7 @@ const MESI      = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
 
 let statoCorrente = null, advTimer = null, indiceContenuto = 0, contenuti = [];
 let bannerColore = '#000000', bannerTestoColore = '#ffffff';
+let modalitaAttuale = 'tv';
 
 function adattaSchermo() {
     const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
@@ -154,22 +152,19 @@ async function avviaSegnaleTV() {
 }
 
 function applicaBanner(banner) {
-    const el        = document.getElementById('layer-banner');
-    const altezza   = parseInt(banner.banner_altezza) || 80;
-    const posizione = banner.banner_posizione || 'bottom';
+    const el      = document.getElementById('layer-banner');
+    const altezza = parseInt(banner.banner_altezza) || 80;
+    const pos     = banner.banner_posizione || 'bottom';
 
     bannerColore      = banner.banner_colore       || '#000000';
     bannerTestoColore = banner.banner_testo_colore || '#ffffff';
 
-    el.style.backgroundColor = bannerColore;
-    el.style.color            = bannerTestoColore;
-    el.style.height           = altezza + 'px';
-    el.style.padding          = '0 ' + Math.round(altezza * 0.25) + 'px';
-    el.style.gap              = Math.round(altezza * 0.25) + 'px';
+    el.style.height  = altezza + 'px';
+    el.style.padding = '0 ' + Math.round(altezza * 0.25) + 'px';
+    el.style.gap     = Math.round(altezza * 0.25) + 'px';
 
     const tvEl = document.getElementById('layer-tv');
-
-    if (posizione === 'top') {
+    if (pos === 'top') {
         el.style.top = '0'; el.style.bottom = 'auto';
         tvEl.style.top    = altezza + 'px';
         tvEl.style.height = (1080 - altezza) + 'px';
@@ -178,8 +173,6 @@ function applicaBanner(banner) {
         tvEl.style.top    = '0';
         tvEl.style.height = (1080 - altezza) + 'px';
     }
-
-    // ADV non viene toccato — sempre 1920x1080
 
     const logo = document.getElementById('banner-logo');
     if (banner.logo) {
@@ -191,26 +184,61 @@ function applicaBanner(banner) {
 
     document.getElementById('banner-ora-dx').style.fontSize      = Math.round(altezza * 0.44) + 'px';
     document.getElementById('banner-data-centro').style.fontSize = Math.round(altezza * 0.28) + 'px';
-    document.getElementById('banner-ora-dx').style.color         = bannerTestoColore;
-    document.getElementById('banner-data-centro').style.color    = bannerTestoColore;
+
+    if (modalitaAttuale === 'adv') {
+        el.style.backgroundColor = 'transparent';
+        document.getElementById('banner-logo-wrap').style.visibility   = 'hidden';
+        document.getElementById('banner-data-centro').style.visibility = 'hidden';
+        document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'hidden');
+        const ora = document.getElementById('banner-ora-dx');
+        ora.style.color           = '#ffffff';
+        ora.style.textShadow      = '0 0 8px rgba(0,0,0,0.9)';
+        ora.style.backgroundColor = 'rgba(0,0,0,0.5)';
+        ora.style.borderRadius    = '6px';
+        ora.style.padding         = '4px 14px';
+    } else {
+        el.style.backgroundColor = bannerColore;
+        el.style.color            = bannerTestoColore;
+        document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
+        document.getElementById('banner-data-centro').style.visibility = 'visible';
+        document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
+        document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
+        const ora = document.getElementById('banner-ora-dx');
+        ora.style.color           = bannerTestoColore;
+        ora.style.textShadow      = '';
+        ora.style.backgroundColor = '';
+        ora.style.borderRadius    = '';
+        ora.style.padding         = '';
+    }
 }
 
 function mostraTV() {
+    modalitaAttuale = 'tv';
     document.getElementById('layer-adv').style.display = 'none';
     document.getElementById('layer-tv').style.display  = 'block';
+
     const banner = document.getElementById('layer-banner');
     banner.style.backgroundColor = bannerColore;
     document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
     document.getElementById('banner-data-centro').style.visibility = 'visible';
-    document.getElementById('banner-ora-dx').style.opacity         = '1';
-    document.getElementById('banner-ora-dx').style.color           = bannerTestoColore;
+    document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
     document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
+
+    const ora = document.getElementById('banner-ora-dx');
+    ora.style.opacity         = '1';
+    ora.style.color           = bannerTestoColore;
+    ora.style.textShadow      = '';
+    ora.style.backgroundColor = '';
+    ora.style.borderRadius    = '';
+    ora.style.padding         = '';
+
     const video = document.getElementById('adv-video');
     video.pause(); video.src = '';
     if (advTimer) { clearTimeout(advTimer); advTimer = null; }
 }
 
 function mostraADV(stato) {
+    modalitaAttuale = 'adv';
     contenuti = [...(stato.contenuti || [])];
     indiceContenuto = 0;
     if (stato.contenuto_ora) {
@@ -219,14 +247,21 @@ function mostraADV(stato) {
     }
     document.getElementById('layer-tv').style.display  = 'none';
     document.getElementById('layer-adv').style.display = 'block';
-    // Banner trasparente, solo ora visibile semitrasparente
+
     const banner = document.getElementById('layer-banner');
     banner.style.backgroundColor = 'transparent';
     document.getElementById('banner-logo-wrap').style.visibility   = 'hidden';
     document.getElementById('banner-data-centro').style.visibility = 'hidden';
-    document.getElementById('banner-ora-dx').style.opacity         = '0.45';
-    document.getElementById('banner-ora-dx').style.color           = '#ffffff';
     document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'hidden');
+
+    const ora = document.getElementById('banner-ora-dx');
+    ora.style.opacity         = '1';
+    ora.style.color           = '#ffffff';
+    ora.style.textShadow      = '0 0 8px rgba(0,0,0,0.9)';
+    ora.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    ora.style.borderRadius    = '6px';
+    ora.style.padding         = '4px 14px';
+
     mostraContenuto(indiceContenuto);
 }
 

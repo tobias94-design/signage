@@ -36,28 +36,23 @@ if (!$sheet_url) {
             width: 1920px; height: 1080px;
             top: 0; left: 0;
             transform-origin: top left;
-            overflow: hidden;
-            background: #000;
+            overflow: hidden; background: #000;
         }
 
         #main {
             position: absolute;
             top: 0; left: 0;
             width: 1920px; height: 1080px;
-            display: flex;
-            flex-direction: row;
+            display: flex; flex-direction: row;
         }
 
         #layer-tv {
-            flex: 1;
-            background: #111;
-            position: relative;
-            overflow: hidden;
+            flex: 1; background: #111;
+            position: relative; overflow: hidden;
         }
         #tv-video {
             position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%;
-            object-fit: cover;
+            width: 100%; height: 100%; object-fit: cover;
         }
         #tv-placeholder {
             position: absolute; top: 50%; left: 50%;
@@ -65,7 +60,6 @@ if (!$sheet_url) {
             color: #222; font-size: 32px; text-align: center;
         }
 
-        /* ADV sempre 1920x1080 fissi, sopra tutto tranne banner */
         #layer-adv {
             position: absolute; top: 0; left: 0;
             width: 1920px; height: 1080px;
@@ -73,17 +67,14 @@ if (!$sheet_url) {
         }
         #adv-video {
             position: absolute; top: 0; left: 0;
-            width: 1920px; height: 1080px;
-            object-fit: contain;
+            width: 1920px; height: 1080px; object-fit: contain;
         }
         #adv-immagine {
-        position: absolute; top: 0; left: 0;
-        width: 1920px; height: 1080px;
-        object-fit: contain; /* ← era cover */
-        display: none;
+            position: absolute; top: 0; left: 0;
+            width: 1920px; height: 1080px;
+            object-fit: contain; display: none;
         }
 
-        /* Colonna corsi */
         #colonna-corsi {
             width: 380px; background: #111;
             display: flex; flex-direction: column;
@@ -107,7 +98,6 @@ if (!$sheet_url) {
         .corso-indicatore { display: none; color: #e94560; font-size: 14px; margin-top: 4px; letter-spacing: 2px; }
         .corso-item.attivo .corso-indicatore { display: block; }
 
-        /* Buon allenamento */
         #buon-allenamento {
             display: none; flex-direction: column;
             align-items: center; justify-content: center;
@@ -136,7 +126,6 @@ if (!$sheet_url) {
         .buon-linea { width:40px; height:3px; background:#e94560; margin:14px auto; box-shadow:0 0 10px #e94560; }
         .buon-testo { font-size:30px; font-weight:bold; color:#fff; text-transform:uppercase; letter-spacing:4px; line-height:1.5; text-shadow:0 2px 20px rgba(233,69,96,0.5); }
 
-        /* Banner sempre sopra tutto z-index 30 */
         #layer-banner {
             position: absolute;
             left: 0; right: 0; bottom: 0;
@@ -149,7 +138,7 @@ if (!$sheet_url) {
         #banner-logo { object-fit:contain; display:none; }
         .banner-sep { width:1px; background:rgba(255,255,255,0.3); align-self:stretch; margin:14px 0; flex-shrink:0; }
         #banner-data-centro { flex:1; text-align:center; font-weight:500; letter-spacing:2px; }
-        #banner-ora-dx { font-weight:bold; letter-spacing:3px; flex-shrink:0; text-align:right; font-variant-numeric:tabular-nums; }
+        #banner-ora-dx { font-weight:bold; letter-spacing:3px; flex-shrink:0; text-align:right; font-variant-numeric:tabular-nums; transition: all 0.3s; }
     </style>
 </head>
 <body>
@@ -176,13 +165,11 @@ if (!$sheet_url) {
         </div>
     </div>
 
-    <!-- ADV fullscreen sotto il banner -->
     <div id="layer-adv">
         <video id="adv-video" preload="auto" muted playsinline autoplay></video>
         <img id="adv-immagine" src="">
     </div>
 
-    <!-- Banner sempre sopra tutto -->
     <div id="layer-banner">
         <div id="banner-logo-wrap">
             <img id="banner-logo" src="">
@@ -208,6 +195,7 @@ const MESI      = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
 let statoCorrente = null, advTimer = null, indiceContenuto = 0;
 let contenuti = [], corsiOggi = [];
 let bannerColore = '#000000', bannerTestoColore = '#ffffff';
+let modalitaAttuale = 'tv';
 
 function adattaSchermo() {
     const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
@@ -244,22 +232,19 @@ async function avviaSegnaleTV() {
 }
 
 function applicaBanner(banner) {
-    const el        = document.getElementById('layer-banner');
-    const altezza   = parseInt(banner.banner_altezza) || 80;
-    const posizione = banner.banner_posizione || 'bottom';
+    const el      = document.getElementById('layer-banner');
+    const altezza = parseInt(banner.banner_altezza) || 80;
+    const pos     = banner.banner_posizione || 'bottom';
 
     bannerColore      = banner.banner_colore       || '#000000';
     bannerTestoColore = banner.banner_testo_colore || '#ffffff';
 
-    el.style.backgroundColor = bannerColore;
-    el.style.color            = bannerTestoColore;
-    el.style.height           = altezza + 'px';
-    el.style.padding          = '0 ' + Math.round(altezza * 0.25) + 'px';
-    el.style.gap              = Math.round(altezza * 0.25) + 'px';
+    el.style.height  = altezza + 'px';
+    el.style.padding = '0 ' + Math.round(altezza * 0.25) + 'px';
+    el.style.gap     = Math.round(altezza * 0.25) + 'px';
 
     const mainEl = document.getElementById('main');
-
-    if (posizione === 'top') {
+    if (pos === 'top') {
         el.style.top = '0'; el.style.bottom = 'auto';
         mainEl.style.top    = altezza + 'px';
         mainEl.style.height = (1080 - altezza) + 'px';
@@ -268,8 +253,6 @@ function applicaBanner(banner) {
         mainEl.style.top    = '0';
         mainEl.style.height = (1080 - altezza) + 'px';
     }
-
-    // ADV non viene mai toccato — sempre 1920x1080 fissi
 
     const logo = document.getElementById('banner-logo');
     if (banner.logo) {
@@ -281,26 +264,61 @@ function applicaBanner(banner) {
 
     document.getElementById('banner-ora-dx').style.fontSize      = Math.round(altezza * 0.44) + 'px';
     document.getElementById('banner-data-centro').style.fontSize = Math.round(altezza * 0.28) + 'px';
-    document.getElementById('banner-ora-dx').style.color         = bannerTestoColore;
-    document.getElementById('banner-data-centro').style.color    = bannerTestoColore;
+
+    if (modalitaAttuale === 'adv') {
+        el.style.backgroundColor = 'transparent';
+        document.getElementById('banner-logo-wrap').style.visibility   = 'hidden';
+        document.getElementById('banner-data-centro').style.visibility = 'hidden';
+        document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'hidden');
+        const ora = document.getElementById('banner-ora-dx');
+        ora.style.color           = '#ffffff';
+        ora.style.textShadow      = '0 0 8px rgba(0,0,0,0.9)';
+        ora.style.backgroundColor = 'rgba(0,0,0,0.5)';
+        ora.style.borderRadius    = '6px';
+        ora.style.padding         = '4px 14px';
+    } else {
+        el.style.backgroundColor = bannerColore;
+        el.style.color            = bannerTestoColore;
+        document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
+        document.getElementById('banner-data-centro').style.visibility = 'visible';
+        document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
+        document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
+        const ora = document.getElementById('banner-ora-dx');
+        ora.style.color           = bannerTestoColore;
+        ora.style.textShadow      = '';
+        ora.style.backgroundColor = '';
+        ora.style.borderRadius    = '';
+        ora.style.padding         = '';
+    }
 }
 
 function mostraTV() {
+    modalitaAttuale = 'tv';
     document.getElementById('layer-adv').style.display = 'none';
     document.getElementById('main').style.display      = 'flex';
+
     const banner = document.getElementById('layer-banner');
     banner.style.backgroundColor = bannerColore;
     document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
     document.getElementById('banner-data-centro').style.visibility = 'visible';
-    document.getElementById('banner-ora-dx').style.opacity         = '1';
-    document.getElementById('banner-ora-dx').style.color           = bannerTestoColore;
+    document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
     document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
+
+    const ora = document.getElementById('banner-ora-dx');
+    ora.style.opacity         = '1';
+    ora.style.color           = bannerTestoColore;
+    ora.style.textShadow      = '';
+    ora.style.backgroundColor = '';
+    ora.style.borderRadius    = '';
+    ora.style.padding         = '';
+
     const video = document.getElementById('adv-video');
     video.pause(); video.src = '';
     if (advTimer) { clearTimeout(advTimer); advTimer = null; }
 }
 
 function mostraADV(stato) {
+    modalitaAttuale = 'adv';
     contenuti = [...(stato.contenuti || [])];
     indiceContenuto = 0;
     if (stato.contenuto_ora) {
@@ -309,14 +327,21 @@ function mostraADV(stato) {
     }
     document.getElementById('main').style.display      = 'none';
     document.getElementById('layer-adv').style.display = 'block';
-    // Banner trasparente, solo ora visibile semitrasparente
+
     const banner = document.getElementById('layer-banner');
     banner.style.backgroundColor = 'transparent';
     document.getElementById('banner-logo-wrap').style.visibility   = 'hidden';
     document.getElementById('banner-data-centro').style.visibility = 'hidden';
-    document.getElementById('banner-ora-dx').style.opacity         = '0.45';
-    document.getElementById('banner-ora-dx').style.color           = '#ffffff';
     document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'hidden');
+
+    const ora = document.getElementById('banner-ora-dx');
+    ora.style.opacity         = '1';
+    ora.style.color           = '#ffffff';
+    ora.style.textShadow      = '0 0 8px rgba(0,0,0,0.9)';
+    ora.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    ora.style.borderRadius    = '6px';
+    ora.style.padding         = '4px 14px';
+
     mostraContenuto(indiceContenuto);
 }
 
