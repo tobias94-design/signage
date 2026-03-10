@@ -544,12 +544,17 @@ function selezionaLayout(tipo) {
         }
     }
 
-    // Salva subito via AJAX + feedback verde
+    // Salva subito via AJAX + feedback verde + reload per aggiornare tab
     const fd = new FormData();
     fd.append('salva_layout_tipo', '1');
     fd.append('layout_tipo', tipo);
     fetch('/layout.php', { method:'POST', body:fd }).then(r => r.text()).then(t => {
-        if (t === 'ok') flashSaved(document.querySelector('.box'));
+        if (t === 'ok') {
+            // Flash verde rapido poi reload
+            const box = document.querySelector('.box');
+            if (box) box.style.outline = '2px solid #22c55e';
+            setTimeout(() => window.location.href = `/layout.php?tab=banner&profilo=<?php echo $profilo_id; ?>`, 600);
+        }
     });
 }
 

@@ -103,7 +103,7 @@ if (!$sheet_url) {
         .widget-content {
             position: relative; z-index: 2;
             height: 100%; display: flex; flex-direction: column;
-            padding: 28px 28px 20px;
+            padding: 28px 28px 100px; /* 100px = spazio banner */
         }
 
         /* Header widget */
@@ -137,12 +137,7 @@ if (!$sheet_url) {
         .info-icona { font-size: 56px; line-height: 1; }
         .info-testo { font-size: 26px; line-height: 1.5; font-weight: 300; }
 
-        /* Barra progresso slide */
-        #sidebar-progress {
-            position: absolute; bottom: 0; left: 0; height: 3px;
-            background: rgba(255,255,255,0.7); z-index: 50;
-            transition: width linear;
-        }
+        /* Barra progresso rimossa */
 
         #layer-banner {
             position: absolute;
@@ -169,14 +164,10 @@ if (!$sheet_url) {
         </div>
         <div id="colonna-corsi">
             <div id="sidebar-widget">
-                <!-- Sfondo e overlay dinamici -->
                 <div class="widget-sfondo" id="widget-sfondo"></div>
                 <div class="widget-overlay" id="widget-overlay"></div>
-                <div class="widget-content" id="widget-content">
-                    <!-- Contenuto widget renderizzato da JS -->
-                </div>
+                <div class="widget-content" id="widget-content"></div>
             </div>
-            <div id="sidebar-progress" style="width:0%"></div>
         </div>
     </div>
 
@@ -247,12 +238,21 @@ function mostraSlide(idx) {
         // Applica sfondo
         const colTesto = slide.colore_testo || '#ffffff';
         if (slide.sfondo) {
-            sfondoEl.style.backgroundImage = `url('${BASE_URL}uploads/${slide.sfondo}')`;
-            sfondoEl.style.backgroundColor = '';
+            sfondoEl.style.cssText = `position:absolute;inset:0;background-size:cover;background-position:center;z-index:0;background-image:url('${BASE_URL}uploads/${slide.sfondo}')`;
             overlayEl.style.display = 'block';
+        } else if (slide.sfondo_preset) {
+            const presetMap = {
+                'dark_red': 'linear-gradient(135deg,#000 0%,#1a0000 40%,#8b0000 100%)',
+                'midnight': 'linear-gradient(135deg,#0a0a1a 0%,#0f3460 100%)',
+                'purple':   'linear-gradient(135deg,#1a0030 0%,#4a0080 100%)',
+                'forest':   'linear-gradient(135deg,#001a0a 0%,#004d20 100%)',
+                'gold':     'linear-gradient(135deg,#1a1200 0%,#4d3800 100%)',
+                'carbon':   'linear-gradient(135deg,#111 0%,#2a2a2a 100%)',
+            };
+            sfondoEl.style.cssText = `position:absolute;inset:0;background-size:cover;background-position:center;z-index:0;background:${presetMap[slide.sfondo_preset] || slide.colore_sfondo || '#111'}`;
+            overlayEl.style.display = 'none';
         } else {
-            sfondoEl.style.backgroundImage = '';
-            sfondoEl.style.backgroundColor = slide.colore_sfondo || '#111111';
+            sfondoEl.style.cssText = `position:absolute;inset:0;z-index:0;background:${slide.colore_sfondo || '#111111'}`;
             overlayEl.style.display = 'none';
         }
         contentEl.style.color = colTesto;
@@ -270,23 +270,11 @@ function mostraSlide(idx) {
         widget.classList.remove('fade-out');
         widget.classList.add('fade-in');
 
-        // Barra progresso
-        avviaProgresso(slide.durata);
-
+        // Barra progresso rimossa
         // Timer prossima slide
         if (sidebarTimer) clearTimeout(sidebarTimer);
         sidebarTimer = setTimeout(() => mostraSlide(sidebarIndice + 1), slide.durata * 1000);
     }, 600);
-}
-
-function avviaProgresso(durata) {
-    const bar = document.getElementById('sidebar-progress');
-    bar.style.transition = 'none';
-    bar.style.width = '0%';
-    setTimeout(() => {
-        bar.style.transition = `width ${durata}s linear`;
-        bar.style.width = '100%';
-    }, 50);
 }
 
 // ── RENDER CORSI ─────────────────────────────────────────────────
@@ -636,11 +624,13 @@ async function aggiornaDaAPI() {
         if (stato.errore) { setTimeout(aggiornaDaAPI, 15000); return; }
         if (stato.banner) applicaBanner(stato.banner);
 
-        // Aggiorna sidebar slides se cambiate
-        if (stato.sidebar_slides) {
-            const nuove = JSON.stringify(stato.sidebar_slides);
+        // Aggiorna sidebar slides — forza sempre al primo caricamento
+        if (stato.sidebar_slides && stato.sidebar_slides.length) {
+            const nuove   = JSON.stringify(stato.sidebar_slides);
             const vecchie = JSON.stringify(sidebarSlides);
-            if (nuove !== vecchie) avviaSidebar(stato.sidebar_slides);
+            if (nuove !== vecchie) {
+                avviaSidebar(stato.sidebar_slides);
+            }
         }
 
         const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
@@ -661,12 +651,13 @@ document.addEventListener('DOMContentLoaded', () => {
     aggiornaOrologio();
     setInterval(aggiornaOrologio, 1000);
     avviaSegnaleTV();
+    aggiornaDaAPI(); // subito — porta le slide dal DB
     caricaCorsi().then(() => {
-        // Avvia sidebar con slide corsi di default finché l'API non risponde
-        avviaSidebar([{ tipo:'corsi', titolo:'In programma oggi', durata:30,
-                        colore_sfondo:'#111111', colore_testo:'#ffffff', sfondo:'', contenuto:'{}' }]);
+        if (!sidebarSlides.length) {
+            avviaSidebar([{ tipo:'corsi', titolo:'In programma oggi', durata:30,
+                            colore_sfondo:'#111111', colore_testo:'#ffffff', sfondo:'', sfondo_preset:'', contenuto:'{}' }]);
+        }
     });
-    setTimeout(aggiornaDaAPI, 500);
 });
 </script>
 </body>
