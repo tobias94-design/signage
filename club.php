@@ -8,6 +8,10 @@ $msg    = '';
 $view   = $_GET['view'] ?? 'lista';
 $token  = $_GET['token'] ?? '';
 
+try { $db->exec("ALTER TABLE dispositivi ADD COLUMN numero_tv INTEGER DEFAULT NULL"); } catch(Exception $e) {}
+try { $db->exec("ALTER TABLE dispositivi ADD COLUMN indirizzo TEXT DEFAULT ''"); } catch(Exception $e) {}
+try { $db->exec("ALTER TABLE dispositivi ADD COLUMN note TEXT DEFAULT ''"); } catch(Exception $e) {}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -26,13 +30,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $club      = trim($_POST['club'] ?? '');
         $layout    = $_POST['layout'] ?? 'standard';
         $sheet_url = trim($_POST['sheet_url'] ?? '');
+        $numero_tv = (int)($_POST['numero_tv'] ?? 0) ?: null;
+        $indirizzo = trim($_POST['indirizzo'] ?? '');
+        $note      = trim($_POST['note'] ?? '');
         $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '-', trim($club ?: $nome)));
         $slug = trim($slug, '-');
         $slug = substr($slug, 0, 20);
         $tok  = $slug . '-' . bin2hex(random_bytes(3));
         if ($nome) {
-            $db->prepare("INSERT INTO dispositivi (nome, club, layout, sheet_url, token) VALUES (?, ?, ?, ?, ?)")
-               ->execute([$nome, $club, $layout, $sheet_url, $tok]);
+            $db->prepare("INSERT INTO dispositivi (nome, club, layout, sheet_url, token, numero_tv, indirizzo, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+               ->execute([$nome, $club, $layout, $sheet_url, $tok, $numero_tv, $indirizzo, $note]);
         }
         header('Location: club.php');
         exit;
@@ -45,8 +52,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $profilo_id = $_POST['profilo_id'] ?? null;
         $layout     = $_POST['layout'] ?? 'standard';
         $sheet_url  = trim($_POST['sheet_url'] ?? '');
-        $db->prepare("UPDATE dispositivi SET nome=?, club=?, profilo_id=?, layout=?, sheet_url=? WHERE token=?")
-           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $tok]);
+        $numero_tv  = (int)($_POST['numero_tv'] ?? 0) ?: null;
+        $indirizzo  = trim($_POST['indirizzo'] ?? '');
+        $note       = trim($_POST['note'] ?? '');
+        $db->prepare("UPDATE dispositivi SET nome=?, club=?, profilo_id=?, layout=?, sheet_url=?, numero_tv=?, indirizzo=?, note=? WHERE token=?")
+           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $numero_tv, $indirizzo, $note, $tok]);
         header('Location: club.php');
         exit;
     }
@@ -168,6 +178,21 @@ require_once __DIR__ . '/includes/header.php';
                 <div style="font-size:13px; color:#888; margin-bottom:4px;">
                     Club: <span style="color:#ccc;"><?php echo htmlspecialchars($d['club'] ?? '—'); ?></span>
                 </div>
+                <?php if (!empty($d['indirizzo'])): ?>
+                <div style="font-size:13px; color:#888; margin-bottom:4px;">
+                    📍 <span style="color:#ccc;"><?php echo htmlspecialchars($d['indirizzo']); ?></span>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($d['numero_tv'])): ?>
+                <div style="font-size:13px; color:#888; margin-bottom:4px;">
+                    📺 TV N° <span style="color:#ccc;"><?php echo htmlspecialchars($d['numero_tv']); ?></span>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($d['note'])): ?>
+                <div style="font-size:13px; color:#888; margin-bottom:4px;">
+                    📝 <span style="color:#ccc;"><?php echo htmlspecialchars($d['note']); ?></span>
+                </div>
+                <?php endif; ?>
                 <div style="font-size:13px; color:#888; margin-bottom:4px;">
                     Token: <code style="color:#e94560; font-size:12px;"><?php echo htmlspecialchars($d['token']); ?></code>
                 </div>
@@ -228,6 +253,14 @@ require_once __DIR__ . '/includes/header.php';
                 <label>URL Google Sheet Corsi</label>
                 <input type="text" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv">
                 <div style="font-size:12px; color:#666; margin-top:-8px; margin-bottom:16px;">Nel foglio: File → Pubblica sul web → CSV → copia link</div>
+                <div style="border-top:1px solid rgba(255,255,255,0.06); margin-top:4px; padding-top:16px;">
+                    <label>N° TV / Schermo</label>
+                    <input type="number" name="numero_tv" placeholder="Es: 1" min="1">
+                    <label>Indirizzo club</label>
+                    <input type="text" name="indirizzo" placeholder="Es: Via Roma 12, Milano">
+                    <label>Note</label>
+                    <textarea name="note" rows="2" style="width:100%;padding:10px;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:var(--sg-white);font-size:13px;resize:vertical;" placeholder="Es: TV principale sala corsi"></textarea>
+                </div>
                 <div style="display:flex; gap:12px; margin-top:8px;">
                     <button type="submit" class="btn">✅ Crea dispositivo</button>
                     <a href="club.php" class="btn btn-secondary">Annulla</a>
@@ -271,6 +304,14 @@ require_once __DIR__ . '/includes/header.php';
                 <input type="text" name="sheet_url" value="<?php echo htmlspecialchars($dev['sheet_url'] ?? ''); ?>"
                        placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv">
                 <div style="font-size:12px; color:#666; margin-top:-8px; margin-bottom:16px;">Nel foglio: File → Pubblica sul web → CSV → copia link</div>
+                <div style="border-top:1px solid rgba(255,255,255,0.06); margin-top:4px; padding-top:16px;">
+                    <label>N° TV / Schermo</label>
+                    <input type="number" name="numero_tv" value="<?php echo htmlspecialchars($dev['numero_tv'] ?? ''); ?>" placeholder="Es: 1" min="1">
+                    <label>Indirizzo club</label>
+                    <input type="text" name="indirizzo" value="<?php echo htmlspecialchars($dev['indirizzo'] ?? ''); ?>" placeholder="Es: Via Roma 12, Milano">
+                    <label>Note</label>
+                    <textarea name="note" rows="2" style="width:100%;padding:10px;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:var(--sg-white);font-size:13px;resize:vertical;" placeholder="Es: TV principale sala corsi"><?php echo htmlspecialchars($dev['note'] ?? ''); ?></textarea>
+                </div>
                 <div style="display:flex; gap:12px; margin-top:8px;">
                     <button type="submit" class="btn">💾 Salva modifiche</button>
                     <a href="club.php" class="btn btn-secondary">Annulla</a>
