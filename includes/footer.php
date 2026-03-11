@@ -19,7 +19,7 @@ try{$dp=__DIR__.'/../database.sqlite';if(file_exists($dp))$db_kb=round(filesize(
 
 <!-- ══ STATUSBAR ══════════════════════════════════════════ -->
 <footer class="statusbar">
-    <div class="sb-brand">SIGNAGE<span>MANAGER</span></div>
+    <div class="sb-brand">PIXEL<span>BRIDGE</span></div>
     <div class="sb-sep"></div>
     <div class="sb-item"><div class="sb-dot sb-dot-ok"></div>PHP <b><?= $php_maj ?></b></div>
     <div class="sb-sep"></div>
@@ -32,7 +32,7 @@ try{$dp=__DIR__.'/../database.sqlite';if(file_exists($dp))$db_kb=round(filesize(
     <div class="sb-item">Sessione <b><?= $up_str ?></b></div>
     <div class="sb-ticker">
         SISTEMA OPERATIVO &nbsp;·&nbsp; TUTTI I MODULI ATTIVI &nbsp;·&nbsp;
-        <?= date('d/m/Y H:i') ?> &nbsp;·&nbsp; SIGNAGE MANAGER &nbsp;·&nbsp;
+        <?= date('d/m/Y H:i') ?> &nbsp;·&nbsp; PIXELBRIDGE SIGNAGE MANAGER &nbsp;·&nbsp;
     </div>
 </footer>
 
@@ -41,10 +41,26 @@ try{$dp=__DIR__.'/../database.sqlite';if(file_exists($dp))$db_kb=round(filesize(
 <script>
 (function(){
     function pad(n){return String(n).padStart(2,'0');}
-    function tick(){var el=document.getElementById('sg-clock');if(!el)return;var n=new Date();el.textContent=pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds());}
-    setInterval(tick,1000);tick();
+    function tick(){
+        var el=document.getElementById('sg-clock');
+        if(!el)return;
+        var n=new Date();
+        el.textContent=pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds());
+    }
+    setInterval(tick,1000); tick();
+})();
+
+(function(){
+    var t = 30;
+    var el = document.getElementById('sg-api-countdown');
+    if (!el) return;
+    setInterval(function(){
+        t--;
+        if (t <= 0) t = 30;
+        el.textContent = t + 's';
+        el.style.color = t <= 5 ? 'var(--sg-green)' : 'var(--sg-orange)';
+    }, 1000);
 })();
 </script>
-
 </body>
 </html>

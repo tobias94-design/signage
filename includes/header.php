@@ -52,6 +52,11 @@ try {
             <span class="topbar-kpi-val"><?php echo $_topbar_play; ?></span>
             <span class="topbar-kpi-lbl">Playlist</span>
         </div>
+        <div class="topbar-kpi-sep"></div>
+        <div class="topbar-kpi" title="Prossimo aggiornamento TV">
+            <span class="topbar-kpi-val" id="sg-api-countdown" style="color:var(--sg-orange);font-variant-numeric:tabular-nums;">30s</span>
+            <span class="topbar-kpi-lbl">Sync TV</span>
+        </div>
     </div>
     <div class="topbar-status <?php echo ($_topbar_online > 0 || $_topbar_tot == 0) ? 'status-ok' : 'status-warn'; ?>">
         <div class="status-dot"></div>
