@@ -6,7 +6,8 @@ $titolo = $titolo ?? 'Signage Manager';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($titolo); ?> — Signage Manager</title>
+    <title><?php echo htmlspecialchars($titolo); ?> — PixelBridge</title>
+    <link rel="icon" href="/assets/img/Favicon.jpg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/css/style-glass.css">
@@ -18,7 +19,6 @@ $titolo = $titolo ?? 'Signage Manager';
 <div class="sg-grain"></div>
 <div class="sg-app">
 <?php
-// KPI per topbar
 $_topbar_online = 0; $_topbar_tot = 0;
 $_topbar_cont = 0; $_topbar_play = 0;
 try {
@@ -32,13 +32,8 @@ try {
 ?>
 <!-- ══ TOPBAR ══════════════════════════════════════════════ -->
 <header class="topbar">
-    <div class="topbar-brand">
-        <div class="topbar-logo">S</div>
-        <div class="topbar-title">
-            <span class="topbar-name">SIGNAGE</span>
-            <span class="topbar-sub">Manager</span>
-        </div>
-    </div>
+    <img src="/assets/img/Logo_in_orizzontale.png" alt="PixelBridge"
+         style="height:26px;object-fit:contain;opacity:0.95;flex-shrink:0;">
     <div class="topbar-div"></div>
     <div class="topbar-page"><?php echo htmlspecialchars($titolo); ?></div>
     <div style="flex:1;"></div>
