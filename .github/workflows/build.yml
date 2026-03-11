@@ -27,6 +27,7 @@ jobs:
       - name: Build exe
         run: |
           pyinstaller --onefile --noconsole --name "PixelBridge" agent.py
+          pyinstaller --onefile --console --name "PixelBridge-debug" agent.py
 
       - name: Pubblica Release
         uses: softprops/action-gh-release@v2
@@ -41,7 +42,11 @@ jobs:
             2. Mettilo in una cartella (es. `C:\PixelBridge\`)
             3. Eseguilo — compare il codice di pairing a schermo
             4. Inserisci il codice nel pannello admin
-          files: dist/PixelBridge.exe
+
+            > `PixelBridge-debug.exe` — versione con terminale visibile per diagnostica
+          files: |
+            dist/PixelBridge.exe
+            dist/PixelBridge-debug.exe
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
