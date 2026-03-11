@@ -1,321 +1,369 @@
 <?php
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/db.php';
+requireLogin();
+
 $db = getDB();
 
-$token = $_GET['token'] ?? '';
-if (!$token) {
-    $primo = $db->query('SELECT token FROM dispositivi LIMIT 1')->fetch();
-    $token = $primo['token'] ?? '';
+/* ── KPI base ───────────────────────────────────────────── */
+$tot_cont    = (int)$db->query("SELECT COUNT(*) FROM contenuti")->fetchColumn();
+$tot_play    = (int)$db->query("SELECT COUNT(*) FROM playlist")->fetchColumn();
+$tot_profili = (int)$db->query("SELECT COUNT(*) FROM profili")->fetchColumn();
+$tot_disp    = (int)$db->query("SELECT COUNT(*) FROM dispositivi")->fetchColumn();
+$online_disp = (int)$db->query("SELECT COUNT(*) FROM dispositivi WHERE ultimo_ping > datetime('now','-2 minutes')")->fetchColumn();
+$offline_disp = $tot_disp - $online_disp;
+$uptime_pct   = $tot_disp > 0 ? round($online_disp / $tot_disp * 100) : 0;
+
+/* ── TV online/offline via PixelBridge + club_config ─────── */
+$tv_online  = 0;
+$tv_offline = 0;
+$tv_totali  = 0;
+try {
+    $pb_rows = $db->query("
+        SELECT d.club,
+               CASE WHEN d.ultimo_ping > datetime('now','-2 minutes') THEN 1 ELSE 0 END AS pb_online
+        FROM dispositivi d
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    $cc_map = [];
+    foreach ($db->query("SELECT nome, num_tv_totali FROM club_config")->fetchAll(PDO::FETCH_ASSOC) as $r)
+        $cc_map[$r['nome']] = (int)$r['num_tv_totali'];
+    foreach ($pb_rows as $pb) {
+        $n = $cc_map[$pb['club']] ?? 0;
+        $tv_totali += $n;
+        if ($pb['pb_online']) $tv_online += $n;
+        else                  $tv_offline += $n;
+    }
+} catch (Exception $e) {}
+
+/* ── Anno ───────────────────────────────────────────────── */
+$giorno_anno = (int)date('z') + 1;
+$giorni_tot  = date('L') ? 366 : 365;
+$anno_pct    = round($giorno_anno / $giorni_tot * 100);
+
+/* ── Lista dispositivi (widget monitor) ─────────────────── */
+$dispositivi = $db->query("
+    SELECT d.nome, d.club, p.nome AS profilo_nome, d.ultimo_ping,
+           CASE WHEN d.ultimo_ping > datetime('now','-2 minutes') THEN 'online' ELSE 'offline' END AS stato
+    FROM dispositivi d
+    LEFT JOIN profili p ON p.id = d.profilo_id
+    ORDER BY stato DESC, d.nome ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+/* ── Club per live preview ───────────────────────────────── */
+$clubs_preview = [];
+foreach ($dispositivi as $d) {
+    $club = !empty($d['club']) ? $d['club'] : null;
+    if (!$club) continue;
+    if (!isset($clubs_preview[$club])) {
+        $clubs_preview[$club] = [
+            'nome'    => $club,
+            'online'  => 0,
+            'offline' => 0,
+            'profilo' => $d['profilo_nome'] ?? '—',
+            'num_tv'  => 0,
+        ];
+    }
+    $clubs_preview[$club][$d['stato']]++;
 }
+try {
+    foreach ($db->query("SELECT nome, num_tv_totali FROM club_config")->fetchAll(PDO::FETCH_ASSOC) as $r)
+        if (isset($clubs_preview[$r['nome']]))
+            $clubs_preview[$r['nome']]['num_tv'] = (int)$r['num_tv_totali'];
+} catch (Exception $e) {}
+$clubs_preview = array_values($clubs_preview);
 
-$dispositivo = $db->prepare('SELECT d.*, p.nome as profilo_nome FROM dispositivi d LEFT JOIN profili p ON p.id = d.profilo_id WHERE d.token = ?');
-$dispositivo->execute([$token]);
-$dispositivo = $dispositivo->fetch(PDO::FETCH_ASSOC);
+/* ── Schedule oggi ───────────────────────────────────────── */
+$schedule = [];
+try {
+    $map_gg = ['Mon'=>'lun','Tue'=>'mar','Wed'=>'mer','Thu'=>'gio','Fri'=>'ven','Sat'=>'sab','Sun'=>'dom'];
+    $oggi   = $map_gg[date('D')] ?? 'lun';
+    $schedule = $db->query("
+        SELECT e.nome, e.ora_inizio, e.ora_fine, pl.nome AS playlist_nome
+        FROM profili_eventi e
+        LEFT JOIN playlist pl ON pl.id = e.playlist_id
+        WHERE e.giorni LIKE '%$oggi%'
+        ORDER BY e.ora_inizio LIMIT 5
+    ")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
+
+/* ── Contenuti recenti ───────────────────────────────────── */
+$contenuti_recenti = [];
+try {
+    $contenuti_recenti = $db->query("SELECT nome, tipo FROM contenuti ORDER BY id DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
+
+$titolo = 'Dashboard';
+require_once __DIR__ . '/includes/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <title>Player</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
 
-        html, body {
-            width: 100vw; height: 100vh;
-            overflow: hidden; background: #000;
-            font-family: 'Arial', sans-serif;
-        }
+<div class="container">
+<div class="wgrid">
 
-        #player-root {
-            position: absolute;
-            width: 1920px; height: 1080px;
-            top: 0; left: 0;
-            transform-origin: top left;
-            overflow: hidden; background: #000;
-        }
-
-        #layer-tv {
-            position: absolute; top: 0; left: 0;
-            width: 1920px; height: 1080px;
-            background: #111; overflow: hidden;
-        }
-        #tv-video {
-            position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%; object-fit: cover;
-        }
-        #tv-placeholder {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            color: #222; font-size: 32px; text-align: center;
-        }
-
-        #layer-adv {
-            position: absolute; top: 0; left: 0;
-            width: 1920px; height: 1080px;
-            background: #000; display: none; z-index: 20;
-        }
-        #adv-video {
-            position: absolute; top: 0; left: 0;
-            width: 1920px; height: 1080px;
-            object-fit: contain;
-        }
-        #adv-immagine {
-            position: absolute; top: 0; left: 0;
-            width: 1920px; height: 1080px;
-            object-fit: contain; display: none;
-        }
-
-        #layer-banner {
-            position: absolute;
-            left: 0; right: 0; bottom: 0;
-            height: 80px; background: #000;
-            display: flex; align-items: center;
-            z-index: 30; overflow: hidden;
-            transition: background-color 0.3s;
-        }
-        #banner-logo-wrap { display:flex; align-items:center; justify-content:flex-start; flex-shrink:0; }
-        #banner-logo { object-fit:contain; display:none; }
-        .banner-sep { width:1px; background:rgba(255,255,255,0.3); align-self:stretch; margin:14px 0; flex-shrink:0; }
-        #banner-data-centro { flex:1; text-align:center; font-weight:500; letter-spacing:2px; }
-        #banner-ora-dx { font-weight:bold; letter-spacing:3px; flex-shrink:0; text-align:right; font-variant-numeric:tabular-nums; transition: all 0.3s; }
-    </style>
-</head>
-<body>
-<div id="player-root">
-
-    <div id="layer-tv">
-        <div id="tv-placeholder">📺 In attesa segnale TV...</div>
-        <video id="tv-video" autoplay playsinline muted></video>
-    </div>
-
-    <div id="layer-adv">
-        <video id="adv-video" preload="auto" muted playsinline autoplay></video>
-        <img id="adv-immagine" src="">
-    </div>
-
-    <div id="layer-banner">
-        <div id="banner-logo-wrap">
-            <img id="banner-logo" src="">
+    <!-- W1: TV attive -->
+    <div class="w glass">
+        <div class="wl">TV attive
+            <a href="/club.php" class="wl-action">Club →</a>
         </div>
-        <div class="banner-sep"></div>
-        <div id="banner-data-centro"></div>
-        <div class="banner-sep"></div>
-        <div id="banner-ora-dx">--:--:--</div>
+        <div class="bignum">
+            <?= $tv_totali > 0 ? $tv_online : $online_disp ?>
+            <sub>/<?= $tv_totali > 0 ? $tv_totali : $tot_disp ?></sub>
+        </div>
+        <?php if ($tv_totali > 0): ?>
+        <div class="wsub"><?= $tv_offline ?> TV offline &middot; <?= $online_disp ?>/<?= $tot_disp ?> PixelBridge</div>
+        <div class="dp <?= $tv_offline === 0 ? 'dp-up' : ($tv_online > 0 ? 'dp-warn' : 'dp-off') ?>">
+            <?= $tv_offline === 0 ? '↑ Tutte online' : ($tv_online > 0 ? '⚠ '.$tv_offline.' TV offline' : '✕ Tutte offline') ?>
+        </div>
+        <div class="wbar">
+            <div class="wbar-fill <?= $tv_offline===0?'wbar-g':($tv_online>0?'wbar-y':'wbar-r') ?>"
+                 style="width:<?= round($tv_online / $tv_totali * 100) ?>%"></div>
+        </div>
+        <?php else: ?>
+        <div class="wsub"><?= $online_disp ?>/<?= $tot_disp ?> PixelBridge online</div>
+        <div class="dp dp-warn">⚠ Configura n° TV nei Club</div>
+        <div class="wbar">
+            <div class="wbar-fill <?= $offline_disp===0?'wbar-g':'wbar-y' ?>" style="width:<?= $uptime_pct ?>%"></div>
+        </div>
+        <?php endif; ?>
     </div>
 
+    <!-- W2: In onda -->
+    <div class="w glass">
+        <div class="wl">In onda adesso
+            <a href="/playlist.php" class="wl-action">Vedi →</a>
+        </div>
+        <div class="bignum"><?= $tot_cont ?><sub> file</sub></div>
+        <div class="wsub"><?= $tot_play ?> playlist &middot; <?= $tot_profili ?> profili</div>
+        <div class="dp dp-up">↑ Libreria attiva</div>
+        <div class="wbar"><div class="wbar-fill wbar-o" style="width:<?= min(100, $tot_cont * 10) ?>%"></div></div>
+    </div>
+
+    <!-- W3: Disponibilità -->
+    <div class="w glass">
+        <div class="wl">Disponibilità PixelBridge</div>
+        <div class="bignum"><?= $uptime_pct ?><sub>%</sub></div>
+        <div class="wsub"><?= $online_disp ?>/<?= $tot_disp ?> dispositivi online</div>
+        <div class="dp <?= $uptime_pct >= 80 ? 'dp-up' : ($uptime_pct >= 50 ? 'dp-warn' : 'dp-off') ?>">
+            <?= $uptime_pct >= 80 ? '✓ Ottimo' : ($uptime_pct >= 50 ? '⚠ Parziale' : '✕ Critico') ?>
+        </div>
+        <div class="wbar"><div class="wbar-fill wbar-g" style="width:<?= $uptime_pct ?>%"></div></div>
+    </div>
+
+    <!-- W4: Stato sistema -->
+    <div class="w glass <?= $offline_disp > 0 ? 'glass-o' : '' ?>">
+        <div class="wl">Stato sistema</div>
+        <div class="bignum" <?= $offline_disp > 0 ? 'style="color:#FF9F6B"' : '' ?>><?= $offline_disp ?></div>
+        <div class="wsub"><?= $offline_disp === 0 ? 'Nessun problema rilevato' : 'PixelBridge offline' ?></div>
+        <div class="dp <?= $offline_disp === 0 ? 'dp-up' : 'dp-warn' ?>">
+            <?= $offline_disp === 0 ? '✓ Tutto OK' : '⚠ Verifica Club' ?>
+        </div>
+        <div class="wbar">
+            <div class="wbar-fill <?= $offline_disp===0?'wbar-g':'wbar-r' ?>"
+                 style="width:<?= $offline_disp===0 ? 100 : min(100,$offline_disp*20) ?>%"></div>
+        </div>
+    </div>
+
+    <!-- W5+W6: Lista monitor (2col x 2row) -->
+    <div class="w glass w-2 w-r2" style="padding-bottom:0;">
+        <div class="wl">Monitor registrati
+            <a href="/club.php" class="wl-action">Gestisci →</a>
+        </div>
+        <div class="slist">
+        <?php if (empty($dispositivi)): ?>
+            <div class="si">
+                <div class="si-info">
+                    <div class="si-name" style="color:var(--sg-muted);">Nessun dispositivo configurato</div>
+                    <div class="si-meta"><a href="/club.php#form-nuovo" style="color:var(--sg-orange);">+ Aggiungi →</a></div>
+                </div>
+            </div>
+        <?php else: foreach ($dispositivi as $d):
+            $is_on = $d['stato'] === 'online';
+            $ping  = !empty($d['ultimo_ping']) ? date('H:i', strtotime($d['ultimo_ping'])) : '—';
+        ?>
+            <div class="si">
+                <div class="sdot <?= $is_on ? 'sd-on' : 'sd-off' ?>"></div>
+                <div class="si-info">
+                    <div class="si-name"><?= htmlspecialchars($d['nome']) ?></div>
+                    <div class="si-meta">
+                        <?= htmlspecialchars($d['club'] ?? '—') ?>
+                        <?= $d['profilo_nome'] ? ' · '.htmlspecialchars($d['profilo_nome']) : '' ?>
+                        · <?= $ping ?>
+                    </div>
+                </div>
+                <div class="stag <?= $is_on ? 'stag-on' : 'stag-off' ?>"><?= $is_on ? 'Online' : 'Offline' ?></div>
+            </div>
+        <?php endforeach; endif; ?>
+        </div>
+    </div>
+
+    <!-- W7: Live Preview (1col x 2row) -->
+    <div class="w glass w-r2" style="padding-bottom:0;">
+        <div class="wl">
+            Preview live
+            <span id="live-status-pill" style="font-size:9px;background:rgba(232,80,2,0.15);color:var(--sg-orange);padding:2px 7px;border-radius:5px;font-weight:700;border:1px solid rgba(232,80,2,0.25);">● IN ONDA</span>
+        </div>
+        <select class="lp-select" id="club-select" onchange="updatePreview(this.value)">
+            <option value="">— Tutti i club —</option>
+            <?php foreach ($clubs_preview as $c): ?>
+            <option value="<?= htmlspecialchars($c['nome']) ?>">
+                <?= htmlspecialchars($c['nome']) ?><?= $c['num_tv'] > 0 ? ' ('.$c['num_tv'].' TV)' : '' ?>
+            </option>
+            <?php endforeach; ?>
+        </select>
+        <div class="lp-screen">
+            <div class="lp-badge" id="lp-badge">● LIVE</div>
+            <div class="lp-canvas">
+                <div class="lp-brand" id="lp-brand">ALL CLUBS</div>
+                <div class="lp-bar"></div>
+                <div class="lp-bar s"></div>
+            </div>
+        </div>
+        <div class="lp-stats">
+            <div class="lp-stat">
+                <div class="lp-stat-k">TV online</div>
+                <div class="lp-stat-v" id="lp-tv"><?= $tv_totali > 0 ? $tv_online.'/'.$tv_totali : '—' ?></div>
+            </div>
+            <div class="lp-stat">
+                <div class="lp-stat-k">Profilo</div>
+                <div class="lp-stat-v" id="lp-profilo">—</div>
+            </div>
+            <div class="lp-stat">
+                <div class="lp-stat-k">Stato</div>
+                <div class="lp-stat-v" id="lp-layout">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- W8: Anno dot grid -->
+    <div class="w glass">
+        <div class="wl">Anno <?= date('Y') ?>
+            <span class="wl-action"><?= $anno_pct ?>%</span>
+        </div>
+        <div class="dotgrid" id="dotgrid"></div>
+        <div class="dg-num"><?= $anno_pct ?><span style="font-size:16px;font-weight:400;color:var(--sg-muted);">%</span></div>
+        <div class="dg-sub"><?= $giorno_anno ?> giorni su <?= $giorni_tot ?></div>
+    </div>
+
+    <!-- W9: Schedule oggi -->
+    <div class="w glass">
+        <div class="wl">Oggi — <?= date('l d/m') ?>
+            <a href="/profili.php" class="wl-action">Modifica →</a>
+        </div>
+        <?php if (empty($schedule)): ?>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">
+            <div style="font-size:28px;opacity:0.15;">📅</div>
+            <div style="font-size:12px;color:var(--sg-muted);text-align:center;">Nessun evento oggi</div>
+            <a href="/profili.php" style="font-size:11px;color:var(--sg-orange);text-decoration:none;">+ Aggiungi evento →</a>
+        </div>
+        <?php else: ?>
+        <div class="sched">
+        <?php foreach ($schedule as $ev):
+            $sh = 8; $tot_min = 14 * 60;
+            $ini = strtotime($ev['ora_inizio'] ?? '00:00');
+            $fin = strtotime($ev['ora_fine']   ?? '23:59');
+            $ini_m = max(0, (date('H',$ini)*60+date('i',$ini)) - $sh*60);
+            $fin_m = min($tot_min, (date('H',$fin)*60+date('i',$fin)) - $sh*60);
+            $l = round($ini_m/$tot_min*100);
+            $w = max(5, round(($fin_m-$ini_m)/$tot_min*100));
+            $name = htmlspecialchars(mb_substr($ev['nome'],0,10));
+        ?>
+        <div class="slane">
+            <div class="sname"><?= $name ?></div>
+            <div class="strack">
+                <?php if ($l > 0): ?><div class="sblock sb-e" style="width:<?= $l ?>%"></div><?php endif; ?>
+                <div class="sblock sb-o" style="width:<?= $w ?>%"><?= $name ?></div>
+                <?php if ($l+$w < 100): ?><div class="sblock sb-e" style="width:<?= 100-$l-$w ?>%"></div><?php endif; ?>
+            </div>
+        </div>
+        <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+    </div>
+
+</div><!-- /wgrid -->
+
+<!-- Azioni rapide -->
+<div class="box" style="margin-bottom:20px;">
+    <h2>⚡ Azioni rapide</h2>
+    <div class="azioni-rapide">
+        <a href="/contenuti.php" class="btn">+ Contenuto</a>
+        <a href="/playlist.php" class="btn btn-secondary">+ Playlist</a>
+        <a href="/profili.php" class="btn btn-secondary">+ Profilo</a>
+        <a href="/club.php#form-nuovo" class="btn btn-secondary">+ PixelBridge</a>
+        <a href="/layout.php" class="btn btn-secondary">⚙ Layout</a>
+    </div>
 </div>
 
+<!-- Contenuti recenti -->
+<?php if (!empty($contenuti_recenti)): ?>
+<div class="box">
+    <h2>🕐 Caricati di recente</h2>
+    <table>
+        <thead><tr><th>Nome</th><th>Tipo</th></tr></thead>
+        <tbody>
+        <?php foreach ($contenuti_recenti as $c): ?>
+        <tr>
+            <td><?= htmlspecialchars($c['nome']) ?></td>
+            <td>
+                <?php $t = strtolower($c['tipo'] ?? ''); ?>
+                <span class="badge <?= strpos($t,'video')!==false ? 'badge-video' : 'badge-immagine' ?>">
+                    <?= htmlspecialchars($c['tipo'] ?? '—') ?>
+                </span>
+            </td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
+<?php endif; ?>
+
+</div><!-- /container -->
+
 <script>
-const TOKEN    = '<?php echo htmlspecialchars($token); ?>';
-const BASE_URL = '../';
-
-const GIORNI_IT = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
-const MESI      = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
-                   'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-
-let statoCorrente = null, advTimer = null, indiceContenuto = 0, contenuti = [];
-let bannerColore = '#000000', bannerTestoColore = '#ffffff';
-let modalitaAttuale = 'tv';
-
-function adattaSchermo() {
-    const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
-    const root  = document.getElementById('player-root');
-    root.style.transform = 'scale(' + scale + ')';
-    root.style.left = Math.round((window.innerWidth  - 1920 * scale) / 2) + 'px';
-    root.style.top  = Math.round((window.innerHeight - 1080 * scale) / 2) + 'px';
-}
-
-function aggiornaOrologio() {
-    const now  = new Date();
-    const ora  = String(now.getHours()).padStart(2,'0') + ':' +
-                 String(now.getMinutes()).padStart(2,'0') + ':' +
-                 String(now.getSeconds()).padStart(2,'0');
-    const data = GIORNI_IT[now.getDay()] + '  ' +
-                 now.getDate() + ' ' + MESI[now.getMonth()] + ' ' + now.getFullYear();
-    document.getElementById('banner-ora-dx').textContent      = ora;
-    document.getElementById('banner-data-centro').textContent = data;
-}
-
-async function avviaSegnaleTV() {
-    try {
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const capture = devices.find(d => d.kind === 'videoinput');
-        if (!capture) return;
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: capture.deviceId } }, audio: true
-        });
-        const v = document.getElementById('tv-video');
-        v.srcObject = stream; v.play();
-        document.getElementById('tv-placeholder').style.display = 'none';
-    } catch(e) {}
-}
-
-function applicaBanner(banner) {
-    const el      = document.getElementById('layer-banner');
-    const altezza = parseInt(banner.banner_altezza) || 80;
-    const pos     = banner.banner_posizione || 'bottom';
-
-    bannerColore      = banner.banner_colore       || '#000000';
-    bannerTestoColore = banner.banner_testo_colore || '#ffffff';
-
-    el.style.height  = altezza + 'px';
-    el.style.padding = '0 ' + Math.round(altezza * 0.25) + 'px';
-    el.style.gap     = Math.round(altezza * 0.25) + 'px';
-
-    const tvEl = document.getElementById('layer-tv');
-    if (pos === 'top') {
-        el.style.top = '0'; el.style.bottom = 'auto';
-        tvEl.style.top    = altezza + 'px';
-        tvEl.style.height = (1080 - altezza) + 'px';
-    } else {
-        el.style.bottom = '0'; el.style.top = 'auto';
-        tvEl.style.top    = '0';
-        tvEl.style.height = (1080 - altezza) + 'px';
+(function(){
+    var dg = document.getElementById('dotgrid');
+    if (!dg) return;
+    var total = 52, done = Math.round(52 * <?= $anno_pct ?> / 100);
+    for (var i = 0; i < total; i++) {
+        var d = document.createElement('div');
+        d.className = 'dg ' + (i < done ? 'dg-on' : 'dg-off');
+        dg.appendChild(d);
     }
+})();
 
-    const logo = document.getElementById('banner-logo');
-    if (banner.logo) {
-        logo.src = BASE_URL + 'assets/img/' + banner.logo;
-        logo.style.display = 'block';
-        logo.style.height  = Math.round(altezza * 0.75) + 'px';
-        logo.style.width   = 'auto';
-    } else { logo.style.display = 'none'; }
+var clubsData = <?= json_encode($clubs_preview) ?>;
 
-    document.getElementById('banner-ora-dx').style.fontSize      = Math.round(altezza * 0.44) + 'px';
-    document.getElementById('banner-data-centro').style.fontSize = Math.round(altezza * 0.28) + 'px';
+function updatePreview(clubNome) {
+    var brand = document.getElementById('lp-brand');
+    var tvEl  = document.getElementById('lp-tv');
+    var proEl = document.getElementById('lp-profilo');
+    var layEl = document.getElementById('lp-layout');
+    var badge = document.getElementById('lp-badge');
+    var pill  = document.getElementById('live-status-pill');
 
-    if (modalitaAttuale === 'adv') {
-        el.style.backgroundColor = 'transparent';
-        document.getElementById('banner-logo-wrap').style.visibility   = 'hidden';
-        document.getElementById('banner-data-centro').style.visibility = 'hidden';
-        document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'hidden');
-        const ora = document.getElementById('banner-ora-dx');
-        ora.style.color           = '#ffffff';
-        ora.style.textShadow      = '0 0 8px rgba(0,0,0,0.9)';
-        ora.style.backgroundColor = 'rgba(0,0,0,0.5)';
-        ora.style.borderRadius    = '6px';
-        ora.style.padding         = '4px 14px';
-    } else {
-        el.style.backgroundColor = bannerColore;
-        el.style.color            = bannerTestoColore;
-        document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
-        document.getElementById('banner-data-centro').style.visibility = 'visible';
-        document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
-        document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
-        const ora = document.getElementById('banner-ora-dx');
-        ora.style.color           = bannerTestoColore;
-        ora.style.textShadow      = '';
-        ora.style.backgroundColor = '';
-        ora.style.borderRadius    = '';
-        ora.style.padding         = '';
+    if (!clubNome) {
+        brand.textContent = 'ALL CLUBS';
+        tvEl.textContent  = '<?= $tv_totali > 0 ? $tv_online."/".$tv_totali : $online_disp."/".$tot_disp ?>';
+        proEl.textContent = '—';
+        layEl.textContent = '—';
+        badge.textContent = '● LIVE';
+        return;
     }
+    var club = clubsData.find(function(c){ return c.nome === clubNome; });
+    if (!club) return;
+    var isOn = club.online > 0;
+    brand.textContent = clubNome.substring(0,10).toUpperCase();
+    tvEl.textContent  = (isOn ? club.num_tv : '0') + '/' + (club.num_tv || '?');
+    proEl.textContent = club.profilo || '—';
+    layEl.textContent = isOn ? 'Online' : 'Offline';
+    badge.textContent = isOn ? '● LIVE' : '○ OFFLINE';
+    badge.className   = isOn ? 'lp-badge' : 'lp-offline-badge';
+    pill.textContent  = isOn ? '● IN ONDA' : '○ OFFLINE';
+    pill.style.color  = isOn ? 'var(--sg-orange)' : 'var(--sg-red)';
+    pill.style.background = isOn ? 'rgba(232,80,2,0.15)' : 'rgba(255,69,58,0.10)';
+    pill.style.border = isOn ? '1px solid rgba(232,80,2,0.25)' : '1px solid rgba(255,69,58,0.20)';
 }
 
-function mostraTV() {
-    modalitaAttuale = 'tv';
-    document.getElementById('layer-adv').style.display = 'none';
-    document.getElementById('layer-tv').style.display  = 'block';
-
-    const banner = document.getElementById('layer-banner');
-    banner.style.backgroundColor = bannerColore;
-    document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
-    document.getElementById('banner-data-centro').style.visibility = 'visible';
-    document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
-    document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
-
-    const ora = document.getElementById('banner-ora-dx');
-    ora.style.opacity         = '1';
-    ora.style.color           = bannerTestoColore;
-    ora.style.textShadow      = '';
-    ora.style.backgroundColor = '';
-    ora.style.borderRadius    = '';
-    ora.style.padding         = '';
-
-    const video = document.getElementById('adv-video');
-    video.pause(); video.src = '';
-    if (advTimer) { clearTimeout(advTimer); advTimer = null; }
-}
-
-function mostraADV(stato) {
-    modalitaAttuale = 'adv';
-    contenuti = [...(stato.contenuti || [])];
-    indiceContenuto = 0;
-    if (stato.contenuto_ora) {
-        const idx = contenuti.findIndex(c => c.id === stato.contenuto_ora.id);
-        if (idx >= 0) indiceContenuto = idx;
-    }
-    document.getElementById('layer-tv').style.display  = 'none';
-    document.getElementById('layer-adv').style.display = 'block';
-
-    const banner = document.getElementById('layer-banner');
-    banner.style.backgroundColor = 'transparent';
-    document.getElementById('banner-logo-wrap').style.visibility   = 'hidden';
-    document.getElementById('banner-data-centro').style.visibility = 'hidden';
-    document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'hidden');
-
-    const ora = document.getElementById('banner-ora-dx');
-    ora.style.opacity         = '1';
-    ora.style.color           = '#ffffff';
-    ora.style.textShadow      = '0 0 8px rgba(0,0,0,0.9)';
-    ora.style.backgroundColor = 'rgba(0,0,0,0.5)';
-    ora.style.borderRadius    = '6px';
-    ora.style.padding         = '4px 14px';
-
-    mostraContenuto(indiceContenuto);
-}
-
-function mostraContenuto(idx) {
-    if (!contenuti.length) { mostraTV(); return; }
-    idx = idx % contenuti.length; indiceContenuto = idx;
-    const c = contenuti[idx];
-    const video    = document.getElementById('adv-video');
-    const immagine = document.getElementById('adv-immagine');
-    const url = BASE_URL + 'uploads/' + c.file;
-    if (c.tipo === 'video') {
-        immagine.style.display = 'none'; video.style.display = 'block';
-        video.muted = true; video.volume = 0; video.defaultMuted = true;
-        video.setAttribute('muted', '');
-        video.src = url; video.load();
-        video.addEventListener('canplay', function h() {
-            video.removeEventListener('canplay', h); video.play().catch(() => {});
-        });
-        video.onended = () => mostraContenuto(indiceContenuto + 1);
-    } else {
-        video.pause(); video.src = ''; video.style.display = 'none';
-        immagine.style.display = 'block'; immagine.src = url;
-        if (advTimer) clearTimeout(advTimer);
-        advTimer = setTimeout(() => mostraContenuto(indiceContenuto + 1), c.durata * 1000);
-    }
-}
-
-async function aggiornaDaAPI() {
-    try {
-        const res   = await fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&t=' + Date.now());
-        if (!res.ok) throw new Error();
-        const stato = await res.json();
-        if (stato.errore) { setTimeout(aggiornaDaAPI, 15000); return; }
-        if (stato.banner) applicaBanner(stato.banner);
-        const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
-        if (stato.modalita === 'tv') {
-            if (cambiata) mostraTV();
-            setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
-        } else if (stato.modalita === 'adv') {
-            if (cambiata) mostraADV(stato);
-            setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_tv || 60) * 1000, 30000));
-        }
-        statoCorrente = stato;
-    } catch(e) { setTimeout(aggiornaDaAPI, 15000); }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    adattaSchermo();
-    window.addEventListener('resize', adattaSchermo);
-    aggiornaOrologio();
-    setInterval(aggiornaOrologio, 1000);
-    avviaSegnaleTV();
-    setTimeout(aggiornaDaAPI, 500);
-});
+setTimeout(function(){ window.location.reload(); }, 60000);
 </script>
-</body>
-</html>
+
+<?php require_once __DIR__ . '/includes/footer.php'; ?>
