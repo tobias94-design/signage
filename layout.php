@@ -10,7 +10,6 @@ $msg = '';
 try { $db->exec("ALTER TABLE profili ADD COLUMN layout_tipo TEXT DEFAULT 'solo_banner'"); } catch(Exception $e) {}
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN layout_tipo TEXT DEFAULT 'solo_banner'"); } catch(Exception $e) {}
 try { $db->exec("ALTER TABLE sidebar_slides ADD COLUMN sfondo_preset TEXT DEFAULT ''"); } catch(Exception $e) {}
-// Nuova colonna: slide collegate al dispositivo (token) invece che al profilo
 try { $db->exec("ALTER TABLE sidebar_slides ADD COLUMN dispositivo_token TEXT DEFAULT ''"); } catch(Exception $e) {}
 
 // ── AJAX: salva layout tipo dispositivo ───────────────────────
@@ -65,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['azione'])) {
             case 'meteo':     $contenuto = ['citta'=>trim($_POST['mt_citta']??''),'lat'=>trim($_POST['mt_lat']??''),'lon'=>trim($_POST['mt_lon']??'')]; break;
             case 'info':      $contenuto = ['testo'=>trim($_POST['info_testo']??''),'icona'=>trim($_POST['info_icona']??'ℹ️')]; break;
         }
-        $ordine = (int)$db->query("SELECT COUNT(*) FROM sidebar_slides WHERE dispositivo_token=".  $db->quote($dev_token))->fetchColumn();
+        $ordine = (int)$db->query("SELECT COUNT(*) FROM sidebar_slides WHERE dispositivo_token=". $db->quote($dev_token))->fetchColumn();
         $db->prepare('INSERT INTO sidebar_slides (dispositivo_token,tipo,titolo,contenuto,durata,ordine,sfondo,sfondo_preset,colore_sfondo,colore_testo,attivo) VALUES (?,?,?,?,?,?,?,?,?,?,1)')
            ->execute([$dev_token,$tipo,$titolo,json_encode($contenuto),$durata,$ordine,$sfondo,$preset,$_POST['colore_sfondo']??'#111',$_POST['colore_testo']??'#fff']);
         $msg = 'ok|Slide aggiunta!';
@@ -101,7 +100,6 @@ $dispositivi = $db->query("
     ORDER BY d.club, d.nome
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-// Dispositivo selezionato
 $sel_token = $_GET['dev'] ?? ($dispositivi[0]['token'] ?? '');
 $sel_dev   = null;
 foreach ($dispositivi as $d) if ($d['token'] === $sel_token) { $sel_dev = $d; break; }
@@ -110,14 +108,12 @@ if (!$sel_dev && !empty($dispositivi)) { $sel_dev = $dispositivi[0]; $sel_token 
 $tab = $_GET['tab'] ?? 'banner';
 $layout_attivo = $sel_dev['layout_tipo'] ?? 'solo_banner';
 
-// Slide del dispositivo selezionato
 $slides = [];
 if ($sel_token) {
     $slides = $db->query("SELECT * FROM sidebar_slides WHERE dispositivo_token=".$db->quote($sel_token)." ORDER BY ordine")->fetchAll(PDO::FETCH_ASSOC);
-    // Migrazione: se ha ancora slide col vecchio profilo_id e nessuna con token
     if (empty($slides) && $sel_dev && $sel_dev['profilo_id']) {
         $old = $db->query("SELECT * FROM sidebar_slides WHERE profilo_id={$sel_dev['profilo_id']} AND (dispositivo_token='' OR dispositivo_token IS NULL) ORDER BY ordine")->fetchAll(PDO::FETCH_ASSOC);
-        if (!empty($old)) $slides = $old; // mostra ma non migra automaticamente
+        if (!empty($old)) $slides = $old;
     }
 }
 
@@ -147,27 +143,20 @@ require_once 'includes/header.php';
 <div class="messaggio <?= $tm ?>"><?= htmlspecialchars($txt) ?></div>
 <?php endif; ?>
 
-<!-- ══ SEZIONE PRINCIPALE: SELEZIONA CLUB + LAYOUT ══════════ -->
 <div class="box" style="margin-bottom:20px;">
 
-    <!-- Selector club compatto -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+    <!-- ── SELECTOR CLUB DROPDOWN ── -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
         <span style="font-size:11px;font-weight:700;color:var(--sg-muted);text-transform:uppercase;letter-spacing:1px;flex-shrink:0;">Club:</span>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
-        <?php foreach ($dispositivi as $d):
-            $is_sel = $d['token'] === $sel_token;
-            $is_on  = $d['stato'] === 'online';
-        ?>
-        <a href="/layout.php?dev=<?= urlencode($d['token']) ?>&tab=<?= $tab ?>"
-           style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;text-decoration:none;font-size:12px;font-weight:<?= $is_sel?'700':'500' ?>;
-                  background:<?= $is_sel?'rgba(232,80,2,0.15)':'rgba(255,255,255,0.04)' ?>;
-                  border:1px solid <?= $is_sel?'rgba(232,80,2,0.35)':'rgba(255,255,255,0.08)' ?>;
-                  color:<?= $is_sel?'var(--sg-orange)':'var(--sg-text)' ?>;">
-            <span style="width:6px;height:6px;border-radius:50%;background:<?= $is_on?'var(--sg-green)':'var(--sg-red)' ?>;flex-shrink:0;"></span>
-            <?= htmlspecialchars($d['club'] ?: $d['nome']) ?>
-        </a>
-        <?php endforeach; ?>
-        </div>
+        <select onchange="window.location.href='/layout.php?dev='+encodeURIComponent(this.value)+'&tab=<?= $tab ?>'"
+                style="background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;
+                       color:var(--sg-white);padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;min-width:200px;">
+            <?php foreach ($dispositivi as $d): ?>
+            <option value="<?= htmlspecialchars($d['token']) ?>" <?= $d['token']===$sel_token?'selected':'' ?>>
+                <?= $d['stato']==='online' ? '● ' : '○ ' ?><?= htmlspecialchars($d['club'] ?: $d['nome']) ?>
+            </option>
+            <?php endforeach; ?>
+        </select>
     </div>
 
     <?php if ($sel_dev): ?>
@@ -183,7 +172,6 @@ require_once 'includes/header.php';
                 · <?= $sel_dev['stato'] === 'online' ? '<span style="color:var(--sg-green);">Online</span>' : '<span style="color:var(--sg-red);">Offline</span>' ?>
             </div>
         </div>
-        <!-- Selector tipo layout -->
         <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:11px;color:var(--sg-muted);font-weight:600;">Template:</span>
             <div class="layout-pill-group" data-token="<?= htmlspecialchars($sel_token) ?>">
@@ -200,14 +188,14 @@ require_once 'includes/header.php';
         </div>
     </div>
 
-    <!-- Tabs Banner / Slides (visibili sempre, Slides in grigio se solo_banner) -->
+    <!-- Tabs -->
     <div style="display:flex;gap:4px;margin-bottom:20px;">
         <a href="/layout.php?dev=<?= urlencode($sel_token) ?>&tab=banner"
            class="btn <?= $tab==='banner'?'':'btn-secondary' ?> btn-sm">🎨 Banner</a>
         <a href="/layout.php?dev=<?= urlencode($sel_token) ?>&tab=slides"
-           class="btn <?= $tab==='slides'?'':($layout_attivo==='banner_sidebar'?'btn-secondary':'btn-secondary') ?> btn-sm"
-           style="<?= $layout_attivo!=='banner_sidebar'?'opacity:0.4;pointer-events:none;':''; ?>"
-           title="<?= $layout_attivo!=='banner_sidebar'?'Seleziona \'Con Sidebar\' per abilitare':''; ?>">
+           class="btn <?= $tab==='slides'?'':'btn-secondary' ?> btn-sm"
+           style="<?= $layout_attivo!=='banner_sidebar'?'opacity:0.4;pointer-events:none;':'' ?>"
+           title="<?= $layout_attivo!=='banner_sidebar'?'Seleziona \'Con Sidebar\' per abilitare':'' ?>">
             📱 Slide Sidebar
             <?php if (!empty($slides)): ?>
             <span style="background:var(--sg-orange);color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;margin-left:4px;"><?= count($slides) ?></span>
@@ -216,7 +204,7 @@ require_once 'includes/header.php';
     </div>
 
     <?php if ($tab === 'banner'): ?>
-    <!-- ── BANNER ────────────────────────────────────────── -->
+    <!-- ── BANNER ── -->
     <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start;">
         <div>
             <?php if (!$sel_dev['profilo_id']): ?>
@@ -228,7 +216,6 @@ require_once 'includes/header.php';
                 <input type="hidden" name="salva_banner" value="1">
                 <input type="hidden" name="profilo_id_banner" value="<?= $sel_dev['profilo_id'] ?>">
                 <input type="hidden" name="logo_attuale" id="logoAttuale" value="<?= htmlspecialchars($sel_dev['logo']??'') ?>">
-
                 <label>Posizione Banner</label>
                 <select name="banner_posizione" id="inp_posizione">
                     <option value="bottom" <?= ($sel_dev['banner_posizione']??'bottom')==='bottom'?'selected':'' ?>>Basso</option>
@@ -255,8 +242,6 @@ require_once 'includes/header.php';
             </form>
             <?php endif; ?>
         </div>
-
-        <!-- Preview -->
         <div>
             <div style="font-size:11px;font-weight:700;color:var(--sg-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Anteprima</div>
             <div id="previewScreen" style="position:relative;width:100%;aspect-ratio:16/9;background:rgba(255,255,255,0.03);border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
@@ -280,9 +265,8 @@ require_once 'includes/header.php';
     </div>
 
     <?php else: ?>
-    <!-- ── SLIDE SIDEBAR ────────────────────────────────── -->
+    <!-- ── SLIDE SIDEBAR ── -->
     <div style="display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start;">
-
         <div>
             <div style="font-size:11px;font-weight:700;color:var(--sg-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">
                 Nuova slide per <span style="color:var(--sg-orange);"><?= htmlspecialchars($sel_dev['club']?:$sel_dev['nome']) ?></span>
@@ -290,19 +274,16 @@ require_once 'includes/header.php';
             <form method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="azione" value="aggiungi_slide">
                 <input type="hidden" name="dev_token" value="<?= htmlspecialchars($sel_token) ?>">
-
                 <label>Tipo</label>
                 <select name="tipo" id="tipoSel" onchange="aggiornaCampi()">
                     <?php foreach ($tipi as $k=>$t): ?>
                     <option value="<?= $k ?>"><?= $t['label'] ?></option>
                     <?php endforeach; ?>
                 </select>
-
                 <label>Titolo</label>
                 <input type="text" name="titolo" placeholder="Es. Oggi in palestra...">
                 <label>Durata (sec)</label>
                 <input type="number" name="durata" value="10" min="3" max="120">
-
                 <div id="campi-countdown" style="display:none;">
                     <label>Data e ora evento</label>
                     <input type="datetime-local" name="ct_data_target">
@@ -323,7 +304,6 @@ require_once 'includes/header.php';
                     <label>Testo</label>
                     <textarea name="info_testo" rows="3" style="width:100%;padding:10px;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:var(--sg-white);font-size:13px;resize:vertical;"></textarea>
                 </div>
-
                 <div style="border-top:1px solid rgba(255,255,255,0.06);margin-top:12px;padding-top:12px;">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                         <div><label>Sfondo</label><input type="color" name="colore_sfondo" value="#111111" style="width:100%;height:38px;cursor:pointer;"></div>
@@ -343,7 +323,6 @@ require_once 'includes/header.php';
             </form>
         </div>
 
-        <!-- Lista slide -->
         <div>
             <div style="font-size:11px;font-weight:700;color:var(--sg-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">
                 Slide di questo club (<?= count($slides) ?>) <span style="font-weight:400;color:var(--sg-muted);font-size:10px;text-transform:none;letter-spacing:0;">— ⠿ trascina per riordinare</span>
@@ -384,14 +363,13 @@ require_once 'includes/header.php';
             <?php endforeach; ?>
             </div>
 
-            <!-- Anteprima carousel -->
             <?php $slidesAttive = array_filter($slides, fn($s)=>$s['attivo']); ?>
             <?php if (!empty($slidesAttive)): ?>
             <div style="margin-top:16px;">
                 <div style="font-size:11px;color:var(--sg-muted);margin-bottom:8px;">👁 Anteprima carousel</div>
                 <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;">
                 <?php foreach ($slidesAttive as $sl):
-                    $cfg=$json=json_decode($sl['contenuto'],true)?:[];
+                    $cfg=json_decode($sl['contenuto'],true)?:[];
                     $ti=$tipi[$sl['tipo']]??['colore'=>'#aaa'];
                     $hasSfondo=!empty($sl['sfondo']);
                     $hasPreset=!empty($sl['sfondo_preset'])&&isset($presets[$sl['sfondo_preset']])&&$presets[$sl['sfondo_preset']]['css'];
@@ -424,7 +402,7 @@ require_once 'includes/header.php';
     <?php endif; // sel_dev ?>
 </div>
 
-<!-- ══ RIEPILOGO TUTTI I DISPOSITIVI (in fondo) ══════════════ -->
+<!-- ══ RIEPILOGO TUTTI I DISPOSITIVI ══════════════════════════ -->
 <div class="box">
     <div class="wl" style="margin-bottom:14px;">
         Riepilogo layout tutti i club
@@ -454,7 +432,7 @@ require_once 'includes/header.php';
     </div>
 </div>
 
-</div><!-- /container -->
+</div>
 
 <style>
 .layout-pill-group { display:flex;gap:5px; }
@@ -484,7 +462,6 @@ input[type=datetime-local] {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 <script>
 function setLayout(btn, tipo, token) {
-    // Aggiorna tutte le pill-group con lo stesso token
     document.querySelectorAll('.layout-pill-group[data-token="'+token+'"]').forEach(function(group){
         group.querySelectorAll('.layout-pill, .layout-pill-sm').forEach(function(b){
             b.classList.remove('active');
@@ -492,7 +469,6 @@ function setLayout(btn, tipo, token) {
             if (!b.textContent.includes('Sidebar') && tipo==='solo_banner') b.classList.add('active');
         });
     });
-    // Badge salvato nella sezione principale
     const badge = document.querySelector('.saved-badge');
     const fd = new FormData();
     fd.append('salva_layout_tipo','1');
@@ -503,7 +479,6 @@ function setLayout(btn, tipo, token) {
     });
 }
 
-// Banner preview
 const previewScreen=document.getElementById('previewScreen');
 function aggiornaPreview(){
     if(!previewScreen)return;
@@ -570,7 +545,6 @@ if(btnRimuovi){
     });
 }
 
-// Sidebar
 function aggiornaCampi(){
     const tipo=document.getElementById('tipoSel')?.value;if(!tipo)return;
     ['countdown','meteo','info'].forEach(t=>{
