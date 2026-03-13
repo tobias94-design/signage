@@ -8,7 +8,7 @@ import os, sys, json, time, random, socket, subprocess, threading, urllib.reques
 
 # ── CONFIGURAZIONE ────────────────────────────────────────────
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
-SERVER_URL  = 'http://192.168.1.52:8888'   # <-- cambia con il tuo dominio
+SERVER_URL  = 'http://192.168.1.33:8888'   # <-- cambia con il tuo dominio
 PING_INTERVAL   = 60    # secondi tra un ping e l'altro
 PAIRING_TIMEOUT = 600   # 10 minuti per completare il pairing
 CHROME_PATHS = [
