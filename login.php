@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/css/style-glass.css">
 </head>
-<body>
+<body style="background-image:url('/assets/img/Sfondo-auth.webp');background-size:cover;background-position:center;background-repeat:no-repeat;">
 <div class="sg-blob sg-b1"></div>
 <div class="sg-blob sg-b2"></div>
 <div class="sg-blob sg-b3"></div>
