@@ -20,7 +20,7 @@ $db->prepare('UPDATE dispositivi SET stato = ?, ultimo_ping = CURRENT_TIMESTAMP 
    ->execute(['online', $token]);
 
 if (!$dispositivo['profilo_id']) {
-    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db)];
+    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db), 'sidebar_slides' => []];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
 }
@@ -57,7 +57,8 @@ try {
 }
 
 if (!$regola_base) {
-    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db), 'profilo' => $profilo['nome']];
+    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db), 'profilo' => $profilo['nome'],
+                 'sidebar_slides' => getSidebarSlides($db, $profilo['id'], $token)];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
 }
@@ -91,7 +92,8 @@ $contenuti_evento = $evento_attivo ? getContenutiPlaylist($db, $evento_attivo['p
 $contenuti_tutti  = array_values(array_merge($contenuti_base, $contenuti_evento));
 
 if (empty($contenuti_tutti)) {
-    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db), 'profilo' => $profilo['nome']];
+    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db), 'profilo' => $profilo['nome'],
+                 'sidebar_slides' => getSidebarSlides($db, $profilo['id'], $token)];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
 }
@@ -118,7 +120,7 @@ if ($posizione_ciclo < $intervallo_sec) {
         'banner'           => getBanner($db, $profilo),
         'profilo'          => $profilo['nome'],
         'evento_attivo'    => $evento_attivo ? $evento_attivo['nome'] : null,
-        'sidebar_slides'   => getSidebarSlides($db, $profilo['id']),
+        'sidebar_slides'   => getSidebarSlides($db, $profilo['id'], $token),
         'debug'            => "TV per altri {$secondi_alla_adv}s"
     ];
 } else {
@@ -147,7 +149,7 @@ if ($posizione_ciclo < $intervallo_sec) {
         'banner'          => getBanner($db, $profilo),
         'profilo'         => $profilo['nome'],
         'evento_attivo'   => $evento_attivo ? $evento_attivo['nome'] : null,
-        'sidebar_slides'  => getSidebarSlides($db, $profilo['id']),
+        'sidebar_slides'  => getSidebarSlides($db, $profilo['id'], $token),
         'debug'           => "ADV per altri {$secondi_alla_tv}s" . ($evento_attivo ? " [evento: {$evento_attivo['nome']}]" : '')
     ];
 }
@@ -155,14 +157,28 @@ if ($posizione_ciclo < $intervallo_sec) {
 salvaCache($cache_file, $risposta);
 echo json_encode($risposta);
 
-function getSidebarSlides($db, $profilo_id) {
+function getSidebarSlides($db, $profilo_id, $token = '') {
     try {
-        return $db->query("
-            SELECT * FROM sidebar_slides
-            WHERE profilo_id = " . intval($profilo_id) . "
-            AND attivo = 1
-            ORDER BY ordine
-        ")->fetchAll(PDO::FETCH_ASSOC);
+        // Prima cerca per dispositivo_token (nuovo sistema)
+        if ($token) {
+            $slides = $db->query("
+                SELECT * FROM sidebar_slides
+                WHERE dispositivo_token = " . $db->quote($token) . "
+                AND attivo = 1
+                ORDER BY ordine
+            ")->fetchAll(PDO::FETCH_ASSOC);
+            if (!empty($slides)) return $slides;
+        }
+        // Fallback: vecchio sistema per profilo_id
+        if ($profilo_id) {
+            return $db->query("
+                SELECT * FROM sidebar_slides
+                WHERE profilo_id = " . intval($profilo_id) . "
+                AND attivo = 1
+                ORDER BY ordine
+            ")->fetchAll(PDO::FETCH_ASSOC);
+        }
+        return [];
     } catch(Exception $e) { return []; }
 }
 

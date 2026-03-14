@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """
 PixelBridge Agent - Windows
-Pairing automatico + lancia Chrome kiosk + heartbeat
+Pairing automatico + lancia Chrome kiosk + heartbeat + auto-update
 """
 
-import os, sys, json, time, random, socket, subprocess, threading, urllib.request, urllib.parse
+import os, sys, json, time, random, socket, subprocess, threading
+import urllib.request, urllib.parse, shutil, tempfile
 
 # ── CONFIGURAZIONE ────────────────────────────────────────────
+VERSION     = '1.0.1'
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
-SERVER_URL  = 'http://192.168.1.33:8888'   # <-- cambia con il tuo dominio
-PING_INTERVAL   = 60    # secondi tra un ping e l'altro
-PAIRING_TIMEOUT = 600   # 10 minuti per completare il pairing
+SERVER_URL  = 'http://192.168.1.52:8888'
+PING_INTERVAL   = 60
+PAIRING_TIMEOUT = 600
 CHROME_PATHS = [
     r'C:\Program Files\Google\Chrome\Application\chrome.exe',
     r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
 ]
+APP_NAME = 'PixelBridge'
 
 # ── UTILITY ───────────────────────────────────────────────────
 def load_config():
@@ -30,17 +33,7 @@ def save_config(cfg):
 def api_get(path):
     try:
         url = SERVER_URL + path
-        req = urllib.request.Request(url, headers={'User-Agent': 'PixelBridge-Agent/1.0'})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return json.loads(r.read().decode())
-    except Exception as e:
-        return {'ok': False, 'error': str(e)}
-
-def api_post(path, data):
-    try:
-        url  = SERVER_URL + path
-        body = urllib.parse.urlencode(data).encode()
-        req  = urllib.request.Request(url, data=body, headers={'User-Agent': 'PixelBridge-Agent/1.0'})
+        req = urllib.request.Request(url, headers={'User-Agent': f'PixelBridge-Agent/{VERSION}'})
         with urllib.request.urlopen(req, timeout=10) as r:
             return json.loads(r.read().decode())
     except Exception as e:
@@ -56,79 +49,6 @@ def find_chrome():
             return path
     return None
 
-def launch_chrome(token):
-    chrome = find_chrome()
-    if not chrome:
-        show_screen("❌ Chrome non trovato!\nInstalla Google Chrome e riavvia.")
-        return None
-    player_url = f"{SERVER_URL}/player/corsi.php?token={token}"
-    args = [
-        chrome,
-        '--kiosk',
-        '--no-first-run',
-        '--disable-infobars',
-        '--disable-session-crashed-bubble',
-        '--autoplay-policy=no-user-gesture-required',
-        '--disable-features=TranslateUI',
-        f'--user-data-dir={os.path.join(os.path.dirname(CONFIG_FILE), "chrome_profile")}',
-        player_url
-    ]
-    return subprocess.Popen(args)
-
-def ping_server(token):
-    """Manda heartbeat — stato.php lo gestisce già, ma aggiungiamo ping diretto"""
-    api_get(f'/api/stato.php?token={urllib.parse.quote(token)}&t={int(time.time())}')
-
-# ── SCHERMATA PAIRING (finestra tkinter minimalista) ──────────
-_pairing_window = None
-
-def show_screen(message, code=None):
-    """Mostra una finestra fullscreen con il codice o messaggio"""
-    try:
-        import tkinter as tk
-        global _pairing_window
-        if _pairing_window:
-            try: _pairing_window.destroy()
-            except: pass
-
-        root = tk.Tk()
-        _pairing_window = root
-        root.title('PixelBridge')
-        root.configure(bg='#0a0a0a')
-        root.attributes('-fullscreen', True)
-        root.attributes('-topmost', True)
-
-        frame = tk.Frame(root, bg='#0a0a0a')
-        frame.place(relx=0.5, rely=0.5, anchor='center')
-
-        tk.Label(frame, text='⬡ PIXELBRIDGE', font=('Segoe UI', 18, 'bold'),
-                 fg='#e85002', bg='#0a0a0a').pack(pady=(0, 40))
-
-        if code:
-            tk.Label(frame, text='Codice di pairing', font=('Segoe UI', 20),
-                     fg='#888888', bg='#0a0a0a').pack()
-            tk.Label(frame, text=code, font=('Courier New', 80, 'bold'),
-                     fg='#ffffff', bg='#0a0a0a', letter_spacing=10).pack(pady=20)
-            tk.Label(frame, text='Inserisci questo codice nel pannello admin', font=('Segoe UI', 16),
-                     fg='#555555', bg='#0a0a0a').pack()
-            tk.Label(frame, text=f'Scade tra 10 minuti · {get_machine_name()}', font=('Segoe UI', 12),
-                     fg='#333333', bg='#0a0a0a').pack(pady=(10,0))
-        else:
-            tk.Label(frame, text=message, font=('Segoe UI', 22),
-                     fg='#ffffff', bg='#0a0a0a', justify='center').pack()
-
-        root.mainloop()
-    except ImportError:
-        # tkinter non disponibile — scrivi su file di log
-        log(f"SCHERMO: {message} | CODICE: {code}")
-
-def close_screen():
-    global _pairing_window
-    if _pairing_window:
-        try: _pairing_window.quit()
-        except: pass
-        _pairing_window = None
-
 def log(msg):
     ts = time.strftime('%Y-%m-%d %H:%M:%S')
     line = f"[{ts}] {msg}"
@@ -139,56 +59,178 @@ def log(msg):
             f.write(line + '\n')
     except: pass
 
+# ── AUTO-UPDATE ───────────────────────────────────────────────
+def controlla_aggiornamento():
+    """Controlla se esiste una versione più recente e si aggiorna da solo"""
+    try:
+        res = api_get('/api/version.php')
+        if not res.get('version'):
+            return False
+
+        server_ver = res['version'].strip()
+        log(f"Versione locale: {VERSION} | Server: {server_ver}")
+
+        if server_ver == VERSION:
+            return False  # già aggiornato
+
+        download_url = res.get('download', '')
+        if not download_url:
+            log("Nessun URL di download disponibile")
+            return False
+
+        log(f"Aggiornamento disponibile: {server_ver} — scarico da {download_url}")
+
+        # Scarica il nuovo exe in una cartella temp
+        exe_path = os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__)
+        tmp_path = exe_path + '.new'
+
+        req = urllib.request.Request(download_url, headers={'User-Agent': f'PixelBridge-Agent/{VERSION}'})
+        with urllib.request.urlopen(req, timeout=120) as r, open(tmp_path, 'wb') as f:
+            shutil.copyfileobj(r, f)
+
+        log("Download completato — preparo sostituzione")
+
+        # Script batch per sostituire l'exe e rilanciare
+        bat = os.path.join(tempfile.gettempdir(), 'pb_update.bat')
+        with open(bat, 'w') as f:
+            f.write(f'''@echo off
+timeout /t 3 /nobreak >nul
+move /y "{tmp_path}" "{exe_path}"
+start "" "{exe_path}"
+del "%~f0"
+''')
+        subprocess.Popen(['cmd', '/c', bat], creationflags=subprocess.CREATE_NO_WINDOW)
+        log("Riavvio per aggiornamento...")
+        sys.exit(0)
+
+    except Exception as e:
+        log(f"Errore auto-update: {e}")
+        return False
+
+# ── AUTOSTART AL BOOT ─────────────────────────────────────────
+def installa_autostart():
+    try:
+        import winreg
+        exe_path = os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__)
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                             r'Software\Microsoft\Windows\CurrentVersion\Run',
+                             0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, f'"{exe_path}"')
+        winreg.CloseKey(key)
+        log("Autostart registrato")
+    except Exception as e:
+        log(f"Autostart: {e}")
+
+# ── CHROME ────────────────────────────────────────────────────
+def launch_chrome(token):
+    chrome = find_chrome()
+    if not chrome:
+        log("Chrome non trovato!")
+        return None
+    player_url = f"{SERVER_URL}/player/display.php?token={token}"
+    args = [
+        chrome,
+        '--kiosk',
+        '--no-first-run',
+        '--disable-infobars',
+        '--disable-session-crashed-bubble',
+        '--autoplay-policy=no-user-gesture-required',
+        '--disable-features=TranslateUI',
+        '--disable-notifications',
+        '--disable-popup-blocking',
+        '--hide-crash-restore-bubble',
+        f'--user-data-dir={os.path.join(os.path.dirname(CONFIG_FILE), "chrome_profile")}',
+        player_url
+    ]
+    return subprocess.Popen(args)
+
+def ping_server(token):
+    api_get(f'/api/stato.php?token={urllib.parse.quote(token)}&t={int(time.time())}')
+
+# ── SCHERMATA PAIRING ─────────────────────────────────────────
+_pairing_window = None
+
+def show_screen(message='', code=None):
+    try:
+        import tkinter as tk
+        global _pairing_window
+        if _pairing_window:
+            try: _pairing_window.destroy()
+            except: pass
+        root = tk.Tk()
+        _pairing_window = root
+        root.title('PixelBridge')
+        root.configure(bg='#0a0a0a')
+        root.attributes('-fullscreen', True)
+        root.attributes('-topmost', True)
+        frame = tk.Frame(root, bg='#0a0a0a')
+        frame.place(relx=0.5, rely=0.5, anchor='center')
+        tk.Label(frame, text='⬡ PIXELBRIDGE', font=('Segoe UI', 18, 'bold'),
+                 fg='#e85002', bg='#0a0a0a').pack(pady=(0, 40))
+        if code:
+            tk.Label(frame, text='Codice di pairing', font=('Segoe UI', 20),
+                     fg='#888888', bg='#0a0a0a').pack()
+            tk.Label(frame, text=code, font=('Courier New', 80, 'bold'),
+                     fg='#ffffff', bg='#0a0a0a').pack(pady=20)
+            tk.Label(frame, text='Inserisci questo codice nel pannello admin',
+                     font=('Segoe UI', 16), fg='#555555', bg='#0a0a0a').pack()
+            tk.Label(frame, text=f'Scade tra 10 minuti  ·  {get_machine_name()}  ·  v{VERSION}',
+                     font=('Segoe UI', 12), fg='#333333', bg='#0a0a0a').pack(pady=(10,0))
+        else:
+            tk.Label(frame, text=message, font=('Segoe UI', 22),
+                     fg='#ffffff', bg='#0a0a0a', justify='center').pack()
+        root.mainloop()
+    except ImportError:
+        log(f"SCHERMO: {message} | CODICE: {code}")
+
+def close_screen():
+    global _pairing_window
+    if _pairing_window:
+        try: _pairing_window.quit()
+        except: pass
+        _pairing_window = None
+
 # ── PAIRING ───────────────────────────────────────────────────
 def do_pairing():
-    """Genera codice, lo mostra, aspetta che l'admin lo associ"""
-    code = str(random.randint(100000, 999999))
+    code    = str(random.randint(100000, 999999))
     machine = get_machine_name()
-    log(f"Avvio pairing con codice {code} per macchina {machine}")
+    log(f"Pairing: codice {code} per {machine}")
 
-    # Registra il codice sul server
     res = api_get(f'/api/claim.php?action=register&code={code}&machine={urllib.parse.quote(machine)}')
     if not res.get('ok'):
-        log(f"Errore registrazione codice: {res.get('error','')}")
-        # Ritenta dopo 30s
+        log(f"Errore registrazione: {res.get('error','')} — riprovo tra 30s")
         time.sleep(30)
         return do_pairing()
 
-    # Mostra schermata pairing in thread separato
-    t = threading.Thread(target=show_screen, kwargs={'message':'', 'code':code}, daemon=True)
+    t = threading.Thread(target=show_screen, kwargs={'code': code}, daemon=True)
     t.start()
 
-    # Polling ogni 5 secondi per 10 minuti
     deadline = time.time() + PAIRING_TIMEOUT
     while time.time() < deadline:
         time.sleep(5)
         res = api_get(f'/api/claim.php?action=check&code={code}')
-        log(f"Pairing check: {res}")
         if res.get('status') == 'claimed' and res.get('token'):
             token = res['token']
-            log(f"Pairing completato! Token: {token}")
+            log(f"Pairing OK! Token: {token}")
             close_screen()
             cfg = load_config()
-            cfg['token'] = token
+            cfg['token']     = token
             cfg['paired_at'] = time.strftime('%Y-%m-%d %H:%M:%S')
-            cfg['machine'] = machine
+            cfg['machine']   = machine
             save_config(cfg)
             return token
         elif res.get('status') == 'expired':
-            log("Codice scaduto, genero nuovo codice")
             close_screen()
             return do_pairing()
 
-    log("Timeout pairing, genero nuovo codice")
     close_screen()
     return do_pairing()
 
-# ── WATCHDOG CHROME ───────────────────────────────────────────
+# ── WATCHDOG CHROME + PING ────────────────────────────────────
 def run_player(token):
-    """Lancia Chrome e lo rilancia se crasha"""
-    log(f"Avvio player con token: {token}")
+    log(f"Avvio player — token: {token}")
 
-    # Ping thread
+    # Ping ogni 60s in background
     def ping_loop():
         while True:
             time.sleep(PING_INTERVAL)
@@ -196,32 +238,47 @@ def run_player(token):
             except: pass
     threading.Thread(target=ping_loop, daemon=True).start()
 
-    # Watchdog Chrome
+    # Controllo aggiornamenti ogni ora
+    def update_loop():
+        while True:
+            time.sleep(3600)
+            try: controlla_aggiornamento()
+            except: pass
+    threading.Thread(target=update_loop, daemon=True).start()
+
+    # Watchdog Chrome — rilancia se crasha
     while True:
         log("Lancio Chrome kiosk...")
         proc = launch_chrome(token)
         if proc:
             proc.wait()
-            log("Chrome terminato, rilancio tra 5 secondi...")
+            log("Chrome terminato — rilancio tra 5s")
             time.sleep(5)
         else:
             time.sleep(30)
 
 # ── MAIN ──────────────────────────────────────────────────────
 def main():
-    log("=== PixelBridge Agent avviato ===")
-    log(f"Server: {SERVER_URL}")
-    log(f"Macchina: {get_machine_name()}")
+    log(f"=== PixelBridge Agent v{VERSION} ===")
+    log(f"Server: {SERVER_URL} | Macchina: {get_machine_name()}")
 
-    cfg = load_config()
+    installa_autostart()
+    controlla_aggiornamento()  # controlla subito all'avvio
+
+    cfg   = load_config()
     token = cfg.get('token')
 
     if not token:
-        log("Nessun token trovato — avvio pairing")
+        log("Nessun token — avvio pairing")
         token = do_pairing()
 
     if token:
         run_player(token)
 
 if __name__ == '__main__':
-    main()
+    while True:
+        try:
+            main()
+        except Exception as e:
+            log(f"CRASH: {e} — riavvio tra 10s")
+            time.sleep(10)

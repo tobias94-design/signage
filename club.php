@@ -4,324 +4,233 @@ require_once __DIR__ . '/includes/db.php';
 requireLogin();
 $db = getDB();
 
-$msg    = '';
-$view   = $_GET['view'] ?? 'lista';
-$token  = $_GET['token'] ?? '';
+// Raggruppa dispositivi per club
+$dispositivi = $db->query("
+    SELECT d.*, p.nome as profilo_nome,
+           CASE WHEN d.ultimo_ping > datetime('now','-2 minutes') THEN 1 ELSE 0 END AS is_online
+    FROM dispositivi d
+    LEFT JOIN profili p ON p.id = d.profilo_id
+    ORDER BY d.club, d.nome
+")->fetchAll(PDO::FETCH_ASSOC);
 
-try { $db->exec("ALTER TABLE dispositivi ADD COLUMN numero_tv INTEGER DEFAULT NULL"); } catch(Exception $e) {}
-try { $db->exec("ALTER TABLE dispositivi ADD COLUMN indirizzo TEXT DEFAULT ''"); } catch(Exception $e) {}
-try { $db->exec("ALTER TABLE dispositivi ADD COLUMN note TEXT DEFAULT ''"); } catch(Exception $e) {}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
-
-    if ($action === 'claim_pairing') {
-        $code  = preg_replace('/[^0-9]/', '', $_POST['code'] ?? '');
-        $token = trim($_POST['token_dispositivo'] ?? '');
-        if ($code && $token) {
-            $db->prepare("UPDATE pairing_pending SET token=?, claimed=1 WHERE code=?")->execute([$token, $code]);
-        }
-        header('Location: club.php');
-        exit;
+$clubs = [];
+foreach ($dispositivi as $d) {
+    $club = !empty($d['club']) ? $d['club'] : '(senza club)';
+    if (!isset($clubs[$club])) {
+        $clubs[$club] = [
+            'nome'       => $club,
+            'indirizzo'  => $d['indirizzo'] ?? '',
+            'lat'        => $d['lat'] ?? null,
+            'lon'        => $d['lon'] ?? null,
+            'dispositivi'=> [],
+            'online'     => 0,
+            'offline'    => 0,
+            'tv_totali'  => 0,
+        ];
     }
-
-    if ($action === 'nuovo') {
-        $nome      = trim($_POST['nome'] ?? '');
-        $club      = trim($_POST['club'] ?? '');
-        $layout    = $_POST['layout'] ?? 'standard';
-        $sheet_url = trim($_POST['sheet_url'] ?? '');
-        $numero_tv = (int)($_POST['numero_tv'] ?? 0) ?: null;
-        $indirizzo = trim($_POST['indirizzo'] ?? '');
-        $note      = trim($_POST['note'] ?? '');
-        $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '-', trim($club ?: $nome)));
-        $slug = trim($slug, '-');
-        $slug = substr($slug, 0, 20);
-        $tok  = $slug . '-' . bin2hex(random_bytes(3));
-        if ($nome) {
-            $db->prepare("INSERT INTO dispositivi (nome, club, layout, sheet_url, token, numero_tv, indirizzo, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-               ->execute([$nome, $club, $layout, $sheet_url, $tok, $numero_tv, $indirizzo, $note]);
-        }
-        header('Location: club.php');
-        exit;
-    }
-
-    if ($action === 'aggiorna') {
-        $tok        = $_POST['token'] ?? '';
-        $nome       = trim($_POST['nome'] ?? '');
-        $club       = trim($_POST['club'] ?? '');
-        $profilo_id = $_POST['profilo_id'] ?? null;
-        $layout     = $_POST['layout'] ?? 'standard';
-        $sheet_url  = trim($_POST['sheet_url'] ?? '');
-        $numero_tv  = (int)($_POST['numero_tv'] ?? 0) ?: null;
-        $indirizzo  = trim($_POST['indirizzo'] ?? '');
-        $note       = trim($_POST['note'] ?? '');
-        $db->prepare("UPDATE dispositivi SET nome=?, club=?, profilo_id=?, layout=?, sheet_url=?, numero_tv=?, indirizzo=?, note=? WHERE token=?")
-           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $numero_tv, $indirizzo, $note, $tok]);
-        header('Location: club.php');
-        exit;
-    }
-
-    if ($action === 'elimina') {
-        $tok = $_POST['token'] ?? '';
-        $db->prepare("DELETE FROM dispositivi WHERE token=?")->execute([$tok]);
-        header('Location: club.php');
-        exit;
-    }
-
-    if ($action === 'layout_rapido') {
-        $tok    = $_POST['token'] ?? '';
-        $layout = $_POST['layout'] ?? 'standard';
-        $db->prepare("UPDATE dispositivi SET layout=? WHERE token=?")->execute([$layout, $tok]);
-        header('Location: club.php');
-        exit;
+    $clubs[$club]['dispositivi'][] = $d;
+    if ($d['is_online']) $clubs[$club]['online']++;
+    else $clubs[$club]['offline']++;
+    $clubs[$club]['tv_totali'] += max(1, (int)($d['numero_tv'] ?? 0));
+    // Prendi il primo indirizzo/coordinate non vuoti
+    if (empty($clubs[$club]['lat']) && !empty($d['lat'])) {
+        $clubs[$club]['lat'] = $d['lat'];
+        $clubs[$club]['lon'] = $d['lon'];
+        $clubs[$club]['indirizzo'] = $d['indirizzo'];
     }
 }
+$clubs = array_values($clubs);
 
-$dispositivi = $db->query("SELECT d.*, p.nome as profilo_nome FROM dispositivi d LEFT JOIN profili p ON p.id = d.profilo_id ORDER BY d.nome")->fetchAll(PDO::FETCH_ASSOC);
-$profili     = $db->query("SELECT * FROM profili ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
+// Markers per la mappa (solo club con coordinate)
+$markers = array_filter($clubs, fn($c) => !empty($c['lat']));
 
-$dev = null;
-if ($view === 'modifica' && $token) {
-    $s = $db->prepare("SELECT * FROM dispositivi WHERE token=?");
-    $s->execute([$token]);
-    $dev = $s->fetch(PDO::FETCH_ASSOC);
-    if (!$dev) { header('Location: club.php'); exit; }
-}
-
-$titolo = 'Dispositivi';
+$titolo = 'Club';
 require_once __DIR__ . '/includes/header.php';
 ?>
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+#club-map { width:100%; height:320px; border-radius:16px; overflow:hidden; border:1px solid rgba(255,255,255,0.08); }
+.club-card {
+    background:rgba(255,255,255,0.035);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:16px;
+    padding:18px;
+    transition:border-color 0.2s, background 0.2s;
+    cursor:default;
+}
+.club-card:hover { border-color:rgba(232,80,2,0.30); background:rgba(232,80,2,0.04); }
+.club-card.all-online { border-color:rgba(48,209,88,0.20); }
+.club-card.has-offline { border-color:rgba(255,159,107,0.20); }
+.dev-pill {
+    display:inline-flex;align-items:center;gap:5px;
+    padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;
+    background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);
+    color:var(--sg-muted);margin:2px;
+}
+.dev-pill.online { background:rgba(48,209,88,0.10);border-color:rgba(48,209,88,0.20);color:var(--sg-green); }
+.dev-pill.offline { background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.06);color:rgba(255,255,255,0.30); }
+</style>
+
 <div class="container">
 
-<?php if ($view === 'lista'): ?>
-
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-        <div></div>
-        <a href="club.php?view=nuovo" class="btn">+ Nuovo dispositivo</a>
+<!-- ── HEADER + RICERCA ── -->
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+    <input type="text" id="club-search" placeholder="🔍  Cerca club o indirizzo..."
+           oninput="filtraClub(this.value)"
+           style="flex:1;min-width:200px;max-width:400px;padding:10px 16px;
+                  background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);
+                  border-radius:10px;color:var(--sg-white);font-size:14px;">
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:13px;color:var(--sg-muted);"><?= count($clubs) ?> club · <?= count($dispositivi) ?> dispositivi</span>
+        <a href="dispositivi.php?view=nuovo" class="btn btn-sm">+ Nuovo dispositivo</a>
     </div>
+</div>
 
-    <!-- ── PAIRING IN ATTESA ─────────────────────────────────── -->
-    <?php
-    try {
-        $db->exec("CREATE TABLE IF NOT EXISTS pairing_pending (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            code TEXT UNIQUE NOT NULL,
-            machine TEXT DEFAULT '',
-            token TEXT DEFAULT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            expires DATETIME,
-            claimed INTEGER DEFAULT 0
-        )");
-        $db->exec("DELETE FROM pairing_pending WHERE expires < datetime('now')");
-        $pending = $db->query("SELECT * FROM pairing_pending WHERE claimed=0 ORDER BY created_at DESC")->fetchAll(PDO::FETCH_ASSOC);
-    } catch(Exception $e) { $pending = []; }
-    ?>
-    <?php if (!empty($pending)): ?>
-    <div class="box" style="margin-bottom:20px; border:1px solid rgba(232,80,2,0.3); background:rgba(232,80,2,0.05);">
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-            <span style="font-size:18px;">🔗</span>
-            <div>
-                <div style="font-weight:700; color:var(--sg-white);">Pairing in attesa (<?= count($pending) ?>)</div>
-                <div style="font-size:12px; color:var(--sg-muted);">Un PC ha mostrato un codice — associalo a un dispositivo</div>
-            </div>
-        </div>
-        <?php foreach ($pending as $p):
-            $mins_left = max(0, round((strtotime($p['expires']) - time()) / 60));
-        ?>
-        <div style="display:flex; align-items:center; gap:14px; padding:12px 16px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:12px; margin-bottom:8px;">
-            <div style="font-size:28px; font-weight:900; font-family:monospace; color:var(--sg-white); letter-spacing:4px;"><?= htmlspecialchars($p['code']) ?></div>
-            <div style="flex:1;">
-                <div style="font-size:13px; color:var(--sg-white); font-weight:600;">💻 <?= htmlspecialchars($p['machine'] ?: 'PC sconosciuto') ?></div>
-                <div style="font-size:11px; color:var(--sg-muted);">Scade tra <?= $mins_left ?> min · <?= date('H:i', strtotime($p['created_at'])) ?></div>
-            </div>
-            <form method="POST" style="display:flex; align-items:center; gap:8px; margin:0;">
-                <input type="hidden" name="action" value="claim_pairing">
-                <input type="hidden" name="code" value="<?= htmlspecialchars($p['code']) ?>">
-                <select name="token_dispositivo" required
-                        style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:8px; color:var(--sg-white); padding:7px 12px; font-size:12px;">
-                    <option value="">— Associa a dispositivo —</option>
-                    <?php foreach ($dispositivi as $d): ?>
-                    <option value="<?= htmlspecialchars($d['token']) ?>"><?= htmlspecialchars($d['club'] ?: $d['nome']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <button type="submit" class="btn btn-sm" style="background:rgba(232,80,2,0.8);">✓ Associa</button>
-            </form>
-        </div>
-        <?php endforeach; ?>
+<!-- ── MAPPA ── -->
+<?php if (!empty($markers)): ?>
+<div class="box" style="margin-bottom:24px;padding:16px;">
+    <div style="font-size:11px;font-weight:700;color:var(--sg-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">
+        📍 Mappa club <span style="font-weight:400;color:var(--sg-muted);text-transform:none;letter-spacing:0;">(<?= count($markers) ?> con coordinate)</span>
+        <span style="float:right;font-size:10px;font-weight:400;">Per aggiungere coordinate vai su <a href="dispositivi.php" style="color:var(--sg-orange);">Dispositivi</a> → Modifica → Geocodifica</span>
     </div>
-    <?php endif; ?>
-
-    <?php if (empty($dispositivi)): ?>
-        <div class="box"><div class="vuoto">Nessun dispositivo ancora. Creane uno!</div></div>
-    <?php endif; ?>
-
-    <?php foreach ($dispositivi as $d):
-        $playerUrl = ($d['layout'] ?? 'standard') === 'corsi'
-            ? 'player/corsi.php?token=' . $d['token']
-            : 'player/?token=' . $d['token'];
-    ?>
-    <div class="box" style="margin-bottom:16px;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
-
-            <div style="flex:1;">
-                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-                    <span style="font-size:17px; font-weight:bold; color:#fff;">
-                        <?php echo htmlspecialchars($d['nome']); ?>
-                    </span>
-                    <span class="badge badge-profilo"><?php echo htmlspecialchars($d['layout'] ?? 'standard'); ?></span>
-                    <?php if ($d['profilo_nome']): ?>
-                        <span class="badge" style="background:#0f3460; color:#5dade2;"><?php echo htmlspecialchars($d['profilo_nome']); ?></span>
-                    <?php endif; ?>
-                </div>
-
-                <div style="font-size:13px; color:#888; margin-bottom:4px;">
-                    Club: <span style="color:#ccc;"><?php echo htmlspecialchars($d['club'] ?? '—'); ?></span>
-                </div>
-                <?php if (!empty($d['indirizzo'])): ?>
-                <div style="font-size:13px; color:#888; margin-bottom:4px;">
-                    📍 <span style="color:#ccc;"><?php echo htmlspecialchars($d['indirizzo']); ?></span>
-                </div>
-                <?php endif; ?>
-                <?php if (!empty($d['numero_tv'])): ?>
-                <div style="font-size:13px; color:#888; margin-bottom:4px;">
-                    📺 TV N° <span style="color:#ccc;"><?php echo htmlspecialchars($d['numero_tv']); ?></span>
-                </div>
-                <?php endif; ?>
-                <?php if (!empty($d['note'])): ?>
-                <div style="font-size:13px; color:#888; margin-bottom:4px;">
-                    📝 <span style="color:#ccc;"><?php echo htmlspecialchars($d['note']); ?></span>
-                </div>
-                <?php endif; ?>
-                <div style="font-size:13px; color:#888; margin-bottom:4px;">
-                    Token: <code style="color:#e94560; font-size:12px;"><?php echo htmlspecialchars($d['token']); ?></code>
-                </div>
-                <div style="font-size:13px; margin-top:6px;">
-                    <?php if (!empty($d['sheet_url'])): ?>
-                        <span class="badge badge-online">✅ Sheet configurato</span>
-                    <?php else: ?>
-                        <span class="badge" style="background:#3d2e00; color:#f39c12;">⚠️ Sheet non configurato</span>
-                    <?php endif; ?>
-                </div>
-            </div>
-
-            <!-- Layout rapido -->
-            <form method="POST" style="flex-shrink:0;">
-                <input type="hidden" name="action" value="layout_rapido">
-                <input type="hidden" name="token" value="<?php echo $d['token']; ?>">
-                <select name="layout" onchange="this.form.submit()"
-                        style="background:#0f3460; border:1px solid #1a4a7a; border-radius:6px; color:#eee; padding:6px 10px; font-size:13px; cursor:pointer;">
-                    <option value="standard" <?php echo ($d['layout'] ?? '') === 'standard' ? 'selected' : ''; ?>>Standard</option>
-                    <option value="corsi"    <?php echo ($d['layout'] ?? '') === 'corsi'    ? 'selected' : ''; ?>>Corsi Fitness</option>
-                </select>
-            </form>
-        </div>
-
-        <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; align-items:center; border-top:1px solid #0f3460; padding-top:14px;">
-            <a href="<?php echo $playerUrl; ?>" target="_blank" class="btn btn-sm btn-success">▶ Apri Player</a>
-            <a href="club.php?view=modifica&token=<?php echo $d['token']; ?>" class="btn btn-sm btn-secondary">✏️ Modifica</a>
-            <form method="POST" onsubmit="return confirm('Eliminare questo dispositivo?')" style="margin:0;">
-                <input type="hidden" name="action" value="elimina">
-                <input type="hidden" name="token" value="<?php echo $d['token']; ?>">
-                <button type="submit" class="btn btn-sm btn-danger">🗑️ Elimina</button>
-            </form>
-        </div>
+    <div id="club-map"></div>
+</div>
+<?php else: ?>
+<div class="box" style="margin-bottom:24px;padding:20px;text-align:center;border:1px dashed rgba(255,255,255,0.08);">
+    <div style="font-size:13px;color:var(--sg-muted);">
+        🗺️ Nessuna coordinata ancora. Vai su <a href="dispositivi.php" style="color:var(--sg-orange);">Dispositivi</a> → Modifica → inserisci indirizzo → clicca Geocodifica.
     </div>
-    <?php endforeach; ?>
-
-
-<?php elseif ($view === 'nuovo'): ?>
-
-    <div style="max-width:600px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-            <div></div>
-            <a href="club.php" class="btn btn-secondary">← Torna alla lista</a>
-        </div>
-        <div class="box">
-            <h2>Nuovo dispositivo</h2>
-            <form method="POST">
-                <input type="hidden" name="action" value="nuovo">
-                <label>Nome *</label>
-                <input type="text" name="nome" required placeholder="Es: TV Sala Pesi">
-                <label>Club</label>
-                <input type="text" name="club" placeholder="Es: Gymnasium Milano">
-                <label>Layout</label>
-                <select name="layout">
-                    <option value="standard">Standard</option>
-                    <option value="corsi">Corsi Fitness</option>
-                </select>
-                <label>URL Google Sheet Corsi</label>
-                <input type="text" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv">
-                <div style="font-size:12px; color:#666; margin-top:-8px; margin-bottom:16px;">Nel foglio: File → Pubblica sul web → CSV → copia link</div>
-                <div style="border-top:1px solid rgba(255,255,255,0.06); margin-top:4px; padding-top:16px;">
-                    <label>N° TV / Schermo</label>
-                    <input type="number" name="numero_tv" placeholder="Es: 1" min="1">
-                    <label>Indirizzo club</label>
-                    <input type="text" name="indirizzo" placeholder="Es: Via Roma 12, Milano">
-                    <label>Note</label>
-                    <textarea name="note" rows="2" style="width:100%;padding:10px;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:var(--sg-white);font-size:13px;resize:vertical;" placeholder="Es: TV principale sala corsi"></textarea>
-                </div>
-                <div style="display:flex; gap:12px; margin-top:8px;">
-                    <button type="submit" class="btn">✅ Crea dispositivo</button>
-                    <a href="club.php" class="btn btn-secondary">Annulla</a>
-                </div>
-            </form>
-        </div>
-    </div>
-
-
-<?php elseif ($view === 'modifica' && $dev): ?>
-
-    <div style="max-width:600px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-            <div></div>
-            <a href="club.php" class="btn btn-secondary">← Torna alla lista</a>
-        </div>
-        <div class="box">
-            <h2>Modifica: <?php echo htmlspecialchars($dev['nome']); ?></h2>
-            <form method="POST">
-                <input type="hidden" name="action" value="aggiorna">
-                <input type="hidden" name="token" value="<?php echo htmlspecialchars($dev['token']); ?>">
-                <label>Nome *</label>
-                <input type="text" name="nome" required value="<?php echo htmlspecialchars($dev['nome']); ?>">
-                <label>Club</label>
-                <input type="text" name="club" value="<?php echo htmlspecialchars($dev['club'] ?? ''); ?>">
-                <label>Profilo playlist</label>
-                <select name="profilo_id">
-                    <option value="">— Nessuno —</option>
-                    <?php foreach ($profili as $p): ?>
-                        <option value="<?php echo $p['id']; ?>" <?php echo ($dev['profilo_id'] ?? '') == $p['id'] ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($p['nome']); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-                <label>Layout</label>
-                <select name="layout">
-                    <option value="standard" <?php echo ($dev['layout'] ?? '') === 'standard' ? 'selected' : ''; ?>>Standard</option>
-                    <option value="corsi"    <?php echo ($dev['layout'] ?? '') === 'corsi'    ? 'selected' : ''; ?>>Corsi Fitness</option>
-                </select>
-                <label>URL Google Sheet Corsi</label>
-                <input type="text" name="sheet_url" value="<?php echo htmlspecialchars($dev['sheet_url'] ?? ''); ?>"
-                       placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv">
-                <div style="font-size:12px; color:#666; margin-top:-8px; margin-bottom:16px;">Nel foglio: File → Pubblica sul web → CSV → copia link</div>
-                <div style="border-top:1px solid rgba(255,255,255,0.06); margin-top:4px; padding-top:16px;">
-                    <label>N° TV / Schermo</label>
-                    <input type="number" name="numero_tv" value="<?php echo htmlspecialchars($dev['numero_tv'] ?? ''); ?>" placeholder="Es: 1" min="1">
-                    <label>Indirizzo club</label>
-                    <input type="text" name="indirizzo" value="<?php echo htmlspecialchars($dev['indirizzo'] ?? ''); ?>" placeholder="Es: Via Roma 12, Milano">
-                    <label>Note</label>
-                    <textarea name="note" rows="2" style="width:100%;padding:10px;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:var(--sg-white);font-size:13px;resize:vertical;" placeholder="Es: TV principale sala corsi"><?php echo htmlspecialchars($dev['note'] ?? ''); ?></textarea>
-                </div>
-                <div style="display:flex; gap:12px; margin-top:8px;">
-                    <button type="submit" class="btn">💾 Salva modifiche</button>
-                    <a href="club.php" class="btn btn-secondary">Annulla</a>
-                </div>
-            </form>
-        </div>
-    </div>
-
+</div>
 <?php endif; ?>
 
+<!-- ── GRIGLIA CLUB ── -->
+<div id="club-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+<?php foreach ($clubs as $c):
+    $all_on  = $c['offline'] === 0 && $c['online'] > 0;
+    $has_off = $c['offline'] > 0;
+    $cls     = $all_on ? 'all-online' : ($has_off ? 'has-offline' : '');
+?>
+<div class="club-card <?= $cls ?>" data-search="<?= strtolower(htmlspecialchars($c['nome'].' '.($c['indirizzo']??''))) ?>">
+
+    <!-- Nome + stato -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;">
+        <div style="font-size:15px;font-weight:800;color:var(--sg-white);line-height:1.2;"><?= htmlspecialchars($c['nome']) ?></div>
+        <div style="flex-shrink:0;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;
+            background:<?= $all_on?'rgba(48,209,88,0.12)':($has_off?'rgba(255,159,107,0.12)':'rgba(255,255,255,0.06)') ?>;
+            color:<?= $all_on?'var(--sg-green)':($has_off?'#ff9f6b':'var(--sg-muted)') ?>;">
+            <?= $all_on?'✓ Online':($has_off?$c['offline'].' offline':'—') ?>
+        </div>
+    </div>
+
+    <!-- Indirizzo -->
+    <?php if (!empty($c['indirizzo'])): ?>
+    <div style="font-size:12px;color:var(--sg-muted);margin-bottom:10px;">📍 <?= htmlspecialchars($c['indirizzo']) ?></div>
+    <?php endif; ?>
+
+    <!-- Stats -->
+    <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="text-align:center;">
+            <div style="font-size:18px;font-weight:800;color:var(--sg-white);"><?= count($c['dispositivi']) ?></div>
+            <div style="font-size:10px;color:var(--sg-muted);">PixelBridge</div>
+        </div>
+        <div style="text-align:center;">
+            <div style="font-size:18px;font-weight:800;color:var(--sg-white);"><?= $c['tv_totali'] ?></div>
+            <div style="font-size:10px;color:var(--sg-muted);">TV totali</div>
+        </div>
+        <div style="text-align:center;">
+            <div style="font-size:18px;font-weight:800;color:<?= $c['online']>0?'var(--sg-green)':'var(--sg-muted)' ?>;"><?= $c['online'] ?></div>
+            <div style="font-size:10px;color:var(--sg-muted);">Online</div>
+        </div>
+    </div>
+
+    <!-- Dispositivi pills -->
+    <div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:12px;">
+    <?php foreach ($c['dispositivi'] as $d): ?>
+    <a href="dispositivi.php?view=modifica&token=<?= $d['token'] ?>"
+       class="dev-pill <?= $d['is_online']?'online':'offline' ?>"
+       title="<?= htmlspecialchars($d['nome']) ?> · <?= $d['is_online']?'Online':'Offline' ?>">
+        <span style="width:5px;height:5px;border-radius:50%;background:<?= $d['is_online']?'var(--sg-green)':'rgba(255,255,255,0.2)' ?>;flex-shrink:0;"></span>
+        <?= htmlspecialchars($d['nome']) ?>
+    </a>
+    <?php endforeach; ?>
+    </div>
+
+    <!-- Azioni -->
+    <div style="display:flex;gap:6px;border-top:1px solid rgba(255,255,255,0.05);padding-top:12px;">
+        <a href="layout.php?dev=<?= urlencode($c['dispositivi'][0]['token'] ?? '') ?>"
+           class="btn btn-sm btn-secondary" style="font-size:11px;">⚙ Layout</a>
+        <a href="dispositivi.php?view=modifica&token=<?= urlencode($c['dispositivi'][0]['token'] ?? '') ?>"
+           class="btn btn-sm btn-secondary" style="font-size:11px;">✏️ Modifica</a>
+        <?php if (!empty($c['dispositivi'][0]['token'])): ?>
+        <a href="player/corsi.php?token=<?= urlencode($c['dispositivi'][0]['token']) ?>"
+           target="_blank" class="btn btn-sm btn-success" style="font-size:11px;">▶ Player</a>
+        <?php endif; ?>
+    </div>
 </div>
+<?php endforeach; ?>
+</div>
+
+<div id="no-results-club" style="display:none;padding:40px;text-align:center;color:var(--sg-muted);font-size:13px;">
+    Nessun club trovato.
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ── Mappa ──
+<?php if (!empty($markers)): ?>
+var map = L.map('club-map', { zoomControl: true });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO', maxZoom: 18
+}).addTo(map);
+
+var markers = [];
+<?php foreach ($markers as $c):
+    $all_on = $c['offline'] === 0 && $c['online'] > 0;
+    $color  = $all_on ? '#30d158' : ($c['offline'] > 0 ? '#ff9f6b' : '#888');
+?>
+(function() {
+    var icon = L.divIcon({
+        html: '<div style="width:14px;height:14px;border-radius:50%;background:<?= $color ?>;border:2px solid #fff;box-shadow:0 0 8px <?= $color ?>44;"></div>',
+        iconSize: [14,14], iconAnchor: [7,7], className: ''
+    });
+    var m = L.marker([<?= $c['lat'] ?>, <?= $c['lon'] ?>], {icon: icon})
+        .bindPopup('<b><?= htmlspecialchars($c['nome']) ?></b><br><?= htmlspecialchars($c['indirizzo']) ?><br><?= $c['online'] ?>/<?= count($c['dispositivi']) ?> online · <?= $c['tv_totali'] ?> TV');
+    m.addTo(map);
+    markers.push(m);
+})();
+<?php endforeach; ?>
+
+if (markers.length > 0) {
+    var group = L.featureGroup(markers);
+    map.fitBounds(group.getBounds().pad(0.2));
+}
+<?php endif; ?>
+
+// ── Ricerca ──
+function filtraClub(q) {
+    q = q.toLowerCase().trim();
+    var cards = document.querySelectorAll('.club-card');
+    var found = 0;
+    cards.forEach(function(c) {
+        var match = !q || c.dataset.search.includes(q);
+        c.style.display = match ? '' : 'none';
+        if (match) found++;
+    });
+    document.getElementById('no-results-club').style.display = (found === 0 && q) ? 'block' : 'none';
+}
+
+// ── Responsive griglia ──
+function aggiornaGriglia() {
+    var grid = document.getElementById('club-grid');
+    if (!grid) return;
+    var w = window.innerWidth;
+    grid.style.gridTemplateColumns = w < 640 ? '1fr' : (w < 1024 ? 'repeat(2,1fr)' : 'repeat(3,1fr)');
+}
+window.addEventListener('resize', aggiornaGriglia);
+aggiornaGriglia();
+</script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
