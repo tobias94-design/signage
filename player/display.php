@@ -1,449 +1,626 @@
 <?php
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/db.php';
-requireLogin();
+header('X-Frame-Options: SAMEORIGIN');
+require_once __DIR__ . '/../includes/db.php';
 $db = getDB();
 
-$msg   = '';
-
-// Helper tipo display
-$tipi_display = [
-    'tv'    => ['label'=>'TV',     'icona'=>'📺', 'desc'=>'1920×1080',  'color'=>'#3b82f6'],
-    'led'   => ['label'=>'LED',    'icona'=>'💡', 'desc'=>'1720×320',   'color'=>'#f59e0b'],
-    'totem' => ['label'=>'Totem',  'icona'=>'🗼', 'desc'=>'256×768',    'color'=>'#8b5cf6'],
-];
-function tipoDisplayBadge($tipo, $tipi) {
-    $t = $tipi[$tipo] ?? $tipi['tv'];
-    return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:'.$t['color'].'22;color:'.$t['color'].';">'.$t['icona'].' '.$t['label'].'</span>';
-}
-$view  = $_GET['view'] ?? 'lista';
 $token = $_GET['token'] ?? '';
-
-// Migrations
-try { $db->exec("ALTER TABLE dispositivi ADD COLUMN numero_tv INTEGER DEFAULT NULL"); } catch(Exception $e) {}
-try { $db->exec("ALTER TABLE dispositivi ADD COLUMN indirizzo TEXT DEFAULT ''"); } catch(Exception $e) {}
-try { $db->exec("ALTER TABLE dispositivi ADD COLUMN note TEXT DEFAULT ''"); } catch(Exception $e) {}
-try { $db->exec("ALTER TABLE dispositivi ADD COLUMN lat REAL DEFAULT NULL"); } catch(Exception $e) {}
-try { $db->exec("ALTER TABLE dispositivi ADD COLUMN tipo_display TEXT DEFAULT 'tv'"); } catch(Exception $e) {}
-try { $db->exec("ALTER TABLE dispositivi ADD COLUMN lon REAL DEFAULT NULL"); } catch(Exception $e) {}
-try { $db->exec("CREATE TABLE IF NOT EXISTS pairing_pending (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    code TEXT UNIQUE NOT NULL,
-    machine TEXT DEFAULT '',
-    token TEXT DEFAULT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    expires DATETIME,
-    claimed INTEGER DEFAULT 0
-)"); } catch(Exception $e) {}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
-
-    if ($action === 'claim_pairing') {
-        $code = preg_replace('/[^0-9]/', '', $_POST['code'] ?? '');
-        $tok  = trim($_POST['token_dispositivo'] ?? '');
-        if ($code && $tok) $db->prepare("UPDATE pairing_pending SET token=?, claimed=1 WHERE code=?")->execute([$tok, $code]);
-        header('Location: dispositivi.php'); exit;
-    }
-
-    if ($action === 'nuovo') {
-        $nome      = trim($_POST['nome'] ?? '');
-        $club      = trim($_POST['club'] ?? '');
-        $layout    = $_POST['layout'] ?? 'standard';
-        $sheet_url = trim($_POST['sheet_url'] ?? '');
-        $numero_tv = (int)($_POST['numero_tv'] ?? 0) ?: null;
-        $indirizzo = trim($_POST['indirizzo'] ?? '');
-        $note      = trim($_POST['note'] ?? '');
-        $lat          = $_POST['lat'] !== '' ? (float)$_POST['lat'] : null;
-        $lon          = $_POST['lon'] !== '' ? (float)$_POST['lon'] : null;
-        $tipo_display = in_array($_POST['tipo_display']??'tv', ['tv','led','totem']) ? $_POST['tipo_display'] : 'tv';
-        $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '-', trim($club ?: $nome)));
-        $tok  = trim($slug, '-');
-        $tok  = substr($tok, 0, 20) . '-' . bin2hex(random_bytes(3));
-        if ($nome) {
-            $db->prepare("INSERT INTO dispositivi (nome, club, layout, sheet_url, token, numero_tv, indirizzo, note, lat, lon, tipo_display) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-               ->execute([$nome, $club, $layout, $sheet_url, $tok, $numero_tv, $indirizzo, $note, $lat, $lon, $tipo_display]);
-        }
-        header('Location: dispositivi.php'); exit;
-    }
-
-    if ($action === 'aggiorna') {
-        $tok       = $_POST['token'] ?? '';
-        $nome      = trim($_POST['nome'] ?? '');
-        $club      = trim($_POST['club'] ?? '');
-        $profilo_id= $_POST['profilo_id'] ?? null;
-        $layout    = $_POST['layout'] ?? 'standard';
-        $sheet_url = trim($_POST['sheet_url'] ?? '');
-        $numero_tv = (int)($_POST['numero_tv'] ?? 0) ?: null;
-        $indirizzo = trim($_POST['indirizzo'] ?? '');
-        $note      = trim($_POST['note'] ?? '');
-        $lat          = $_POST['lat'] !== '' ? (float)$_POST['lat'] : null;
-        $lon          = $_POST['lon'] !== '' ? (float)$_POST['lon'] : null;
-        $tipo_display = in_array($_POST['tipo_display']??'tv', ['tv','led','totem']) ? $_POST['tipo_display'] : 'tv';
-        $db->prepare("UPDATE dispositivi SET nome=?,club=?,profilo_id=?,layout=?,sheet_url=?,numero_tv=?,indirizzo=?,note=?,lat=?,lon=?,tipo_display=? WHERE token=?")
-           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $numero_tv, $indirizzo, $note, $lat, $lon, $tipo_display, $tok]);
-        header('Location: dispositivi.php'); exit;
-    }
-
-    if ($action === 'elimina') {
-        $tok = $_POST['token'] ?? '';
-        $db->prepare("DELETE FROM dispositivi WHERE token=?")->execute([$tok]);
-        header('Location: dispositivi.php'); exit;
-    }
-
-    if ($action === 'layout_rapido') {
-        $tok    = $_POST['token'] ?? '';
-        $layout = $_POST['layout'] ?? 'standard';
-        $db->prepare("UPDATE dispositivi SET layout=? WHERE token=?")->execute([$layout, $tok]);
-        header('Location: dispositivi.php'); exit;
-    }
+if (!$token) {
+    $primo = $db->query('SELECT token FROM dispositivi LIMIT 1')->fetch();
+    $token = $primo['token'] ?? '';
 }
 
-$dispositivi = $db->query("SELECT d.*, p.nome as profilo_nome, COALESCE(d.tipo_display,'tv') as tipo_display FROM dispositivi d LEFT JOIN profili p ON p.id = d.profilo_id ORDER BY d.club, d.nome")->fetchAll(PDO::FETCH_ASSOC);
-$profili     = $db->query("SELECT * FROM profili ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
+$stmt = $db->prepare('SELECT d.*, p.nome as profilo_nome FROM dispositivi d LEFT JOIN profili p ON p.id = d.profilo_id WHERE d.token = ?');
+$stmt->execute([$token]);
+$dispositivo = $stmt->fetch(PDO::FETCH_ASSOC);
 
-$dev = null;
-if ($view === 'modifica' && $token) {
-    $s = $db->prepare("SELECT * FROM dispositivi WHERE token=?");
-    $s->execute([$token]);
-    $dev = $s->fetch(PDO::FETCH_ASSOC);
-    if (!$dev) { header('Location: dispositivi.php'); exit; }
-}
+if (!$dispositivo) die('<body style="background:#000;color:#e94560;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">Dispositivo non trovato</body>');
 
-// Pairing pending
-$db->exec("DELETE FROM pairing_pending WHERE expires < datetime('now')");
-$pending = $db->query("SELECT * FROM pairing_pending WHERE claimed=0 ORDER BY created_at DESC")->fetchAll(PDO::FETCH_ASSOC);
-
-$titolo = 'Dispositivi';
-require_once __DIR__ . '/includes/header.php';
+$club      = $dispositivo['club'] ?? '';
+$sheet_url = $dispositivo['sheet_url'] ?? '';
 ?>
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>PixelBridge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
-<div class="container">
+        html, body {
+            width: 100vw; height: 100vh;
+            overflow: hidden; background: #000;
+            font-family: 'Figtree', sans-serif;
+        }
 
-<?php if ($view === 'lista'): ?>
+        #player-root {
+            position: absolute;
+            width: 1920px; height: 1080px;
+            top: 0; left: 0;
+            transform-origin: top left;
+            overflow: hidden; background: #000;
+        }
 
-<!-- ── HEADER ── -->
-<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
-    <input type="text" id="search-input" placeholder="🔍  Cerca dispositivo, club, token..."
-           oninput="filtraDispositivi(this.value)"
-           style="flex:1;min-width:200px;max-width:400px;padding:10px 16px;background:rgba(255,255,255,0.055);
-                  border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:var(--sg-white);font-size:14px;">
-    <div style="display:flex;gap:8px;margin-left:auto;">
-        <button onclick="setVista('table')" id="btn-table" class="btn btn-sm btn-secondary" title="Vista tabella">⊟ Tabella</button>
-        <button onclick="setVista('card')"  id="btn-card"  class="btn btn-sm btn-secondary" title="Vista card">⊞ Card</button>
-        <a href="dispositivi.php?view=nuovo" class="btn btn-sm">+ Nuovo</a>
-    </div>
-</div>
+        #main {
+            position: absolute;
+            top: 0; left: 0;
+            width: 1920px; height: 1080px;
+            display: flex; flex-direction: row;
+        }
 
-<!-- ── PAIRING IN ATTESA ── -->
-<?php if (!empty($pending)): ?>
-<div class="box" style="margin-bottom:20px;border:1px solid rgba(232,80,2,0.3);background:rgba(232,80,2,0.04);">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <span style="font-size:16px;">🔗</span>
-        <div>
-            <div style="font-weight:700;color:var(--sg-white);">Pairing in attesa (<?= count($pending) ?>)</div>
-            <div style="font-size:11px;color:var(--sg-muted);">Un PC ha mostrato un codice — associalo a un dispositivo</div>
+        #layer-tv {
+            flex: 1; background: #111;
+            position: relative; overflow: hidden;
+        }
+        #tv-video {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; object-fit: cover;
+        }
+        #tv-placeholder {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #222; font-size: 32px; text-align: center;
+        }
+
+        #layer-adv {
+            position: absolute; top: 0; left: 0;
+            width: 1920px; height: 1080px;
+            background: #000; display: none; z-index: 20;
+        }
+        #adv-video {
+            position: absolute; top: 0; left: 0;
+            width: 1920px; height: 1080px; object-fit: contain;
+        }
+        #adv-immagine {
+            position: absolute; top: 0; left: 0;
+            width: 1920px; height: 1080px;
+            object-fit: contain; display: none;
+        }
+
+        #colonna-corsi {
+            width: 380px; background: #111;
+            display: flex; flex-direction: column;
+            overflow: hidden; border-left: 2px solid #222;
+            position: relative;
+        }
+
+        /* ── WIDGET CAROUSEL ── */
+        #sidebar-widget {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column;
+            transition: opacity 0.6s ease;
+        }
+        #sidebar-widget.fade-out { opacity: 0; }
+        #sidebar-widget.fade-in  { opacity: 1; }
+
+        .widget-sfondo {
+            position: absolute; inset: 0;
+            background-size: cover; background-position: center;
+            z-index: 0;
+        }
+        .widget-overlay {
+            position: absolute; inset: 0;
+            background: rgba(0,0,0,0.45); z-index: 1;
+        }
+        .widget-content {
+            position: relative; z-index: 2;
+            height: 100%; display: flex; flex-direction: column;
+            padding: 28px 28px 20px;
+        }
+
+        .widget-header {
+            font-size: 16px; letter-spacing: 3px; text-transform: uppercase;
+            color: rgba(255,255,255,0.55); font-weight: 400;
+            border-bottom: 1px solid rgba(255,255,255,0.15);
+            padding-bottom: 14px; margin-bottom: 20px; flex-shrink: 0;
+        }
+
+        .widget-countdown { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; }
+        .countdown-titolo { font-size: 28px; font-weight: bold; text-align: center; line-height: 1.3; }
+        .countdown-numeri { display: flex; gap: 16px; justify-content: center; margin-top: 10px; }
+        .countdown-blocco { text-align: center; }
+        .countdown-num { font-size: 64px; font-weight: 900; line-height: 1; letter-spacing: -2px; }
+        .countdown-label { font-size: 14px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.6; margin-top: 4px; }
+        .countdown-post { font-size: 32px; font-weight: bold; text-align: center; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+        .widget-meteo { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; }
+        .meteo-icona { font-size: 80px; line-height: 1; }
+        .meteo-temp { font-size: 72px; font-weight: 900; letter-spacing: -2px; }
+        .meteo-desc { font-size: 22px; opacity: 0.75; text-transform: capitalize; text-align: center; }
+        .meteo-citta { font-size: 18px; opacity: 0.55; letter-spacing: 2px; margin-top: 8px; }
+        .meteo-dettagli { display: flex; gap: 24px; margin-top: 12px; font-size: 16px; opacity: 0.65; }
+
+        .widget-info { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+        .info-icona { font-size: 56px; line-height: 1; }
+        .info-testo { font-size: 26px; line-height: 1.5; font-weight: 300; }
+
+        #layer-banner {
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            height: 80px; background: #000;
+            display: flex; align-items: center;
+            z-index: 30; overflow: hidden;
+            transition: background-color 0.3s;
+        }
+        #banner-logo-wrap { display:flex; align-items:center; justify-content:flex-start; flex-shrink:0; }
+        #banner-logo { object-fit:contain; display:none; }
+        .banner-sep { width:1px; background:rgba(255,255,255,0.3); align-self:stretch; margin:14px 0; flex-shrink:0; }
+        #banner-data-centro { flex:1; text-align:center; font-weight:500; letter-spacing:2px; }
+        #banner-ora-dx { font-weight:bold; letter-spacing:3px; flex-shrink:0; text-align:right; font-variant-numeric:tabular-nums; transition: all 0.3s; }
+    </style>
+</head>
+<body>
+<div id="player-root">
+
+    <div id="main">
+        <div id="layer-tv">
+            <div id="tv-placeholder">📺 In attesa segnale TV...</div>
+            <video id="tv-video" autoplay playsinline muted></video>
+        </div>
+        <div id="colonna-corsi">
+            <div id="sidebar-widget">
+                <div class="widget-sfondo" id="widget-sfondo"></div>
+                <div class="widget-overlay" id="widget-overlay"></div>
+                <div class="widget-content" id="widget-content"></div>
+            </div>
         </div>
     </div>
-    <?php foreach ($pending as $p):
-        $mins_left = max(0, round((strtotime($p['expires']) - time()) / 60));
-    ?>
-    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;margin-bottom:8px;flex-wrap:wrap;">
-        <div style="font-size:26px;font-weight:900;font-family:monospace;color:var(--sg-white);letter-spacing:4px;"><?= htmlspecialchars($p['code']) ?></div>
-        <div style="flex:1;">
-            <div style="font-size:13px;color:var(--sg-white);font-weight:600;">💻 <?= htmlspecialchars($p['machine'] ?: 'PC sconosciuto') ?></div>
-            <div style="font-size:11px;color:var(--sg-muted);">Scade tra <?= $mins_left ?> min</div>
+
+    <div id="layer-adv">
+        <video id="adv-video" preload="auto" muted playsinline autoplay></video>
+        <img id="adv-immagine" src="">
+    </div>
+
+    <div id="layer-banner">
+        <div id="banner-logo-wrap">
+            <img id="banner-logo" src="">
         </div>
-        <form method="POST" style="display:flex;align-items:center;gap:8px;margin:0;">
-            <input type="hidden" name="action" value="claim_pairing">
-            <input type="hidden" name="code" value="<?= htmlspecialchars($p['code']) ?>">
-            <select name="token_dispositivo" required style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--sg-white);padding:7px 12px;font-size:12px;">
-                <option value="">— Associa a dispositivo —</option>
-                <?php foreach ($dispositivi as $d): ?>
-                <option value="<?= htmlspecialchars($d['token']) ?>"><?= htmlspecialchars($d['club'] ?: $d['nome']) ?></option>
-                <?php endforeach; ?>
-            </select>
-            <button type="submit" class="btn btn-sm" style="background:rgba(232,80,2,0.8);">✓ Associa</button>
-        </form>
+        <div class="banner-sep"></div>
+        <div id="banner-data-centro"></div>
+        <div class="banner-sep"></div>
+        <div id="banner-ora-dx">--:--:--</div>
     </div>
-    <?php endforeach; ?>
-</div>
-<?php endif; ?>
-
-<!-- ── VISTA TABELLA ── -->
-<div id="vista-table" class="box" style="padding:0;overflow:hidden;">
-    <table style="width:100%;border-collapse:collapse;">
-        <thead>
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.07);">
-                <th style="padding:12px 16px;text-align:left;font-size:11px;color:var(--sg-muted);font-weight:600;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">Stato</th>
-                <th style="padding:12px 16px;text-align:left;font-size:11px;color:var(--sg-muted);font-weight:600;text-transform:uppercase;letter-spacing:1px;">Dispositivo</th>
-                <th style="padding:12px 16px;text-align:left;font-size:11px;color:var(--sg-muted);font-weight:600;text-transform:uppercase;letter-spacing:1px;">Club</th>
-                
-                <th style="padding:12px 16px;text-align:left;font-size:11px;color:var(--sg-muted);font-weight:600;text-transform:uppercase;letter-spacing:1px;">Ultimo ping</th>
-                <th style="padding:12px 16px;text-align:left;font-size:11px;color:var(--sg-muted);font-weight:600;text-transform:uppercase;letter-spacing:1px;">Azioni</th>
-            </tr>
-        </thead>
-        <tbody id="table-body">
-        <?php foreach ($dispositivi as $d):
-            $is_on = !empty($d['ultimo_ping']) && strtotime($d['ultimo_ping']) > time() - 120;
-            $ping  = !empty($d['ultimo_ping']) ? date('d/m H:i', strtotime($d['ultimo_ping'])) : '—';
-            $playerUrl = 'player/display.php?token='.$d['token'];
-        ?>
-        <tr class="dev-row" data-search="<?= strtolower(htmlspecialchars($d['nome'].' '.$d['club'].' '.$d['token'])) ?>"
-            style="border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.1s;">
-            <td style="padding:12px 16px;">
-                <div style="width:8px;height:8px;border-radius:50%;background:<?= $is_on?'var(--sg-green)':'rgba(255,255,255,0.15)' ?>;"></div>
-            </td>
-            <td style="padding:12px 16px;">
-                <div style="font-size:13px;font-weight:600;color:var(--sg-white);"><?= htmlspecialchars($d['nome']) ?></div>
-                <div style="font-size:10px;color:var(--sg-muted);font-family:monospace;"><?= htmlspecialchars($d['token']) ?></div>
-            </td>
-            <td style="padding:12px 16px;">
-                <div style="font-size:13px;color:var(--sg-white);"><?= htmlspecialchars($d['club'] ?? '—') ?></div>
-                <?php if (!empty($d['indirizzo'])): ?>
-                <div style="font-size:11px;color:var(--sg-muted);">📍 <?= htmlspecialchars($d['indirizzo']) ?></div>
-                <?php endif; ?>
-            </td>
-            <td style="padding:12px 16px;">
-                <form method="POST" style="margin:0;">
-                    <input type="hidden" name="action" value="layout_rapido">
-                    <input type="hidden" name="token" value="<?= $d['token'] ?>">
-                    <select name="layout" onchange="this.form.submit()"
-                            style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);border-radius:6px;color:var(--sg-white);padding:4px 8px;font-size:12px;cursor:pointer;">
-                        <option value="standard" <?= ($d['layout']??'')==='standard'?'selected':'' ?>>Standard</option>
-                        <option value="corsi"    <?= ($d['layout']??'')==='corsi'?'selected':'' ?>>Corsi</option>
-                    </select>
-                </form>
-            </td>
-            <td style="padding:12px 16px;font-size:12px;color:<?= $is_on?'var(--sg-green)':'var(--sg-muted)' ?>;"><?= $ping ?></td>
-            <td style="padding:12px 16px;">
-                <div style="display:flex;gap:6px;align-items:center;">
-                    <a href="<?= $playerUrl ?>" target="_blank" class="btn btn-sm btn-success" style="font-size:11px;padding:3px 8px;">▶</a>
-                    <a href="dispositivi.php?view=modifica&token=<?= $d['token'] ?>" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;">✏️</a>
-                    <form method="POST" onsubmit="return confirm('Eliminare?')" style="margin:0;">
-                        <input type="hidden" name="action" value="elimina">
-                        <input type="hidden" name="token" value="<?= $d['token'] ?>">
-                        <button type="submit" class="btn btn-sm btn-danger" style="font-size:11px;padding:3px 8px;">✕</button>
-                    </form>
-                </div>
-            </td>
-        </tr>
-        <?php endforeach; ?>
-        <?php if (empty($dispositivi)): ?>
-        <tr><td colspan="6" style="padding:40px;text-align:center;color:var(--sg-muted);">Nessun dispositivo. <a href="dispositivi.php?view=nuovo" style="color:var(--sg-orange);">Creane uno →</a></td></tr>
-        <?php endif; ?>
-        </tbody>
-    </table>
-    <div id="no-results" style="display:none;padding:32px;text-align:center;color:var(--sg-muted);font-size:13px;">Nessun risultato trovato.</div>
-</div>
-
-<!-- ── VISTA CARD ── -->
-<div id="vista-card" style="display:none;">
-    <?php foreach ($dispositivi as $d):
-        $is_on = !empty($d['ultimo_ping']) && strtotime($d['ultimo_ping']) > time() - 120;
-        $ping  = !empty($d['ultimo_ping']) ? date('H:i', strtotime($d['ultimo_ping'])) : '—';
-        $playerUrl = 'player/display.php?token='.$d['token'];
-    ?>
-    <div class="dev-row box" data-search="<?= strtolower(htmlspecialchars($d['nome'].' '.$d['club'].' '.$d['token'])) ?>"
-         style="margin-bottom:12px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
-            <div style="flex:1;">
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
-                    <div style="width:8px;height:8px;border-radius:50%;background:<?= $is_on?'var(--sg-green)':'rgba(255,255,255,0.15)' ?>;flex-shrink:0;"></div>
-                    <span style="font-size:16px;font-weight:700;color:var(--sg-white);"><?= htmlspecialchars($d['nome']) ?></span>
-                    <?php if ($d['profilo_nome']): ?>
-                    <span class="badge" style="background:#0f3460;color:#5dade2;"><?= htmlspecialchars($d['profilo_nome']) ?></span>
-                    <?php endif; ?>
-                </div>
-                <div style="font-size:12px;color:var(--sg-muted);margin-bottom:3px;">Club: <span style="color:var(--sg-white);"><?= htmlspecialchars($d['club'] ?? '—') ?></span></div>
-                <?php if (!empty($d['indirizzo'])): ?>
-                <div style="font-size:12px;color:var(--sg-muted);margin-bottom:3px;">📍 <?= htmlspecialchars($d['indirizzo']) ?></div>
-                <?php endif; ?>
-                <?php if (!empty($d['numero_tv'])): ?>
-                <div style="font-size:12px;color:var(--sg-muted);margin-bottom:3px;">📺 TV N° <?= htmlspecialchars($d['numero_tv']) ?></div>
-                <?php endif; ?>
-                <?php if (!empty($d['note'])): ?>
-                <div style="font-size:12px;color:var(--sg-muted);margin-bottom:3px;">📝 <?= htmlspecialchars($d['note']) ?></div>
-                <?php endif; ?>
-                <div style="font-size:11px;margin-top:6px;">
-                    <code style="color:var(--sg-orange);font-size:10px;"><?= htmlspecialchars($d['token']) ?></code>
-                    · <span style="color:<?= $is_on?'var(--sg-green)':'var(--sg-muted)' ?>;"><?= $is_on?'Online':'Offline' ?> <?= $ping ?></span>
-                </div>
-            </div>
-            <form method="POST" style="flex-shrink:0;">
-                <input type="hidden" name="action" value="layout_rapido">
-                <input type="hidden" name="token" value="<?= $d['token'] ?>">
-                <select name="layout" onchange="this.form.submit()"
-                        style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);border-radius:8px;color:var(--sg-white);padding:6px 10px;font-size:12px;cursor:pointer;">
-                    <option value="standard" <?= ($d['layout']??'')==='standard'?'selected':'' ?>>Standard</option>
-                    <option value="corsi"    <?= ($d['layout']??'')==='corsi'?'selected':'' ?>>Corsi Fitness</option>
-                </select>
-            </form>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,0.05);padding-top:12px;">
-            <a href="<?= $playerUrl ?>" target="_blank" class="btn btn-sm btn-success">▶ Apri Player</a>
-            <a href="dispositivi.php?view=modifica&token=<?= $d['token'] ?>" class="btn btn-sm btn-secondary">✏️ Modifica</a>
-            <form method="POST" onsubmit="return confirm('Eliminare questo dispositivo?')" style="margin:0;">
-                <input type="hidden" name="action" value="elimina">
-                <input type="hidden" name="token" value="<?= $d['token'] ?>">
-                <button type="submit" class="btn btn-sm btn-danger">🗑️ Elimina</button>
-            </form>
-        </div>
-    </div>
-    <?php endforeach; ?>
-</div>
-
-<?php elseif ($view === 'nuovo' || $view === 'modifica'): ?>
-
-<div style="max-width:580px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-        <h2 style="margin:0;"><?= $view==='nuovo'?'Nuovo dispositivo':'Modifica: '.htmlspecialchars($dev['nome']) ?></h2>
-        <a href="dispositivi.php" class="btn btn-secondary btn-sm">← Torna</a>
-    </div>
-    <div class="box">
-        <form method="POST" id="dev-form">
-            <input type="hidden" name="action" value="<?= $view==='nuovo'?'nuovo':'aggiorna' ?>">
-            <?php if ($view === 'modifica'): ?>
-            <input type="hidden" name="token" value="<?= htmlspecialchars($dev['token']) ?>">
-            <?php endif; ?>
-            <input type="hidden" name="lat" id="f_lat" value="<?= htmlspecialchars($dev['lat'] ?? '') ?>">
-            <input type="hidden" name="lon" id="f_lon" value="<?= htmlspecialchars($dev['lon'] ?? '') ?>">
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                <div>
-                    <label>Nome *</label>
-                    <input type="text" name="nome" required placeholder="Es: TV Sala Pesi" value="<?= htmlspecialchars($dev['nome'] ?? '') ?>">
-                </div>
-                <div>
-                    <label>Club</label>
-                    <input type="text" name="club" placeholder="Es: Gymnasium Soave" value="<?= htmlspecialchars($dev['club'] ?? '') ?>">
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                <div>
-                    <label>Layout</label>
-                    <select name="layout">
-                        <option value="standard" <?= ($dev['layout']??'')==='standard'?'selected':'' ?>>Standard</option>
-                        <option value="corsi"    <?= ($dev['layout']??'')==='corsi'?'selected':'' ?>>Corsi Fitness</option>
-                    </select>
-                </div>
-                <div>
-                    <label>N° TV / Schermo</label>
-                    <input type="number" name="numero_tv" placeholder="Es: 1" min="1" value="<?= htmlspecialchars($dev['numero_tv'] ?? '') ?>">
-                </div>
-            </div>
-
-            <?php if ($view === 'modifica'): ?>
-            <label>Profilo playlist</label>
-            <select name="profilo_id">
-                <option value="">— Nessuno —</option>
-                <?php foreach ($profili as $p): ?>
-                <option value="<?= $p['id'] ?>" <?= ($dev['profilo_id']??'')==$p['id']?'selected':'' ?>><?= htmlspecialchars($p['nome']) ?></option>
-                <?php endforeach; ?>
-            </select>
-            <?php endif; ?>
-
-            <label>URL Google Sheet Corsi</label>
-            <input type="text" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/..." value="<?= htmlspecialchars($dev['sheet_url'] ?? '') ?>">
-            <div style="font-size:11px;color:var(--sg-muted);margin-top:-8px;margin-bottom:14px;">File → Pubblica sul web → CSV → copia link</div>
-
-            <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:16px;margin-top:4px;">
-                <label style="display:flex;align-items:center;gap:8px;">
-                    Indirizzo club
-                    <span id="geo-status" style="font-size:10px;color:var(--sg-muted);"></span>
-                </label>
-                <div style="display:flex;gap:8px;">
-                    <input type="text" name="indirizzo" id="f_indirizzo" placeholder="Es: Via Roma 12, Soave VR"
-                           value="<?= htmlspecialchars($dev['indirizzo'] ?? '') ?>" style="flex:1;">
-                    <button type="button" onclick="geocodifica()" class="btn btn-sm btn-secondary" style="flex-shrink:0;">📍 Geocodifica</button>
-                </div>
-                <?php if (!empty($dev['lat'])): ?>
-                <div style="font-size:11px;color:var(--sg-green);margin-top:4px;">✓ Coordinate salvate: <?= $dev['lat'] ?>, <?= $dev['lon'] ?></div>
-                <?php endif; ?>
-
-                <label style="margin-top:12px;">Note</label>
-                <textarea name="note" rows="2" style="width:100%;padding:10px;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:var(--sg-white);font-size:13px;resize:vertical;"
-                          placeholder="Es: TV principale sala corsi"><?= htmlspecialchars($dev['note'] ?? '') ?></textarea>
-            </div>
-
-            <div style="display:flex;gap:10px;margin-top:16px;">
-                <button type="submit" class="btn"><?= $view==='nuovo'?'✅ Crea dispositivo':'💾 Salva modifiche' ?></button>
-                <a href="dispositivi.php" class="btn btn-secondary">Annulla</a>
-            </div>
-        </form>
-    </div>
-</div>
-
-<?php endif; ?>
 
 </div>
 
 <script>
-// ── Vista toggle ──
-function setVista(v) {
-    document.getElementById('vista-table').style.display = v==='table' ? 'block' : 'none';
-    document.getElementById('vista-card').style.display  = v==='card'  ? 'block' : 'none';
-    document.getElementById('btn-table').classList.toggle('btn-secondary', v!=='table');
-    document.getElementById('btn-card').classList.toggle('btn-secondary',  v!=='card');
-    localStorage.setItem('disp_vista', v);
-}
-(function(){ setVista(localStorage.getItem('disp_vista') || 'table'); })();
+const TOKEN     = '<?php echo htmlspecialchars($token); ?>';
+const CLUB      = '<?php echo htmlspecialchars($club); ?>';
+const BASE_URL  = '/';
+const SHEET_URL = '<?php echo htmlspecialchars($sheet_url); ?>';
 
-// ── Ricerca ──
-function filtraDispositivi(q) {
-    q = q.toLowerCase().trim();
-    var rows = document.querySelectorAll('.dev-row');
-    var found = 0;
-    rows.forEach(function(r) {
-        var match = !q || r.dataset.search.includes(q);
-        r.style.display = match ? '' : 'none';
-        if (match) found++;
-    });
-    document.getElementById('no-results').style.display = (found === 0 && q) ? 'block' : 'none';
+const GIORNI_IT = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+const MESI      = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                   'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+
+let statoCorrente = null, advTimer = null, indiceContenuto = 0;
+let contenuti = [], corsiOggi = [];
+let bannerColore = '#000000', bannerTestoColore = '#ffffff';
+let modalitaAttuale = 'tv';
+
+// ── SIDEBAR CAROUSEL ──────────────────────────────────────────────
+let sidebarSlides = [];
+let sidebarIndice = 0;
+let sidebarTimer  = null;
+let meteoCache    = {};
+
+var PRESETS = {
+    'dark_red': 'linear-gradient(135deg,#000 0%,#1a0000 40%,#8b0000 100%)',
+    'midnight': 'linear-gradient(135deg,#0a0a1a 0%,#0f3460 100%)',
+    'purple':   'linear-gradient(135deg,#1a0030 0%,#4a0080 100%)',
+    'forest':   'linear-gradient(135deg,#001a0a 0%,#004d20 100%)',
+    'gold':     'linear-gradient(135deg,#1a1200 0%,#4d3800 100%)',
+    'carbon':   'linear-gradient(135deg,#111 0%,#2a2a2a 100%)',
+};
+
+function avviaSidebar(slides) {
+    if (!slides || !slides.length) {
+        sidebarSlides = [{ tipo:'corsi', titolo:'In programma oggi', durata:30, colore_sfondo:'#111111', colore_testo:'#ffffff', sfondo:'', sfondo_preset:'', contenuto:'{}' }];
+    } else {
+        sidebarSlides = slides;
+    }
+    sidebarIndice = 0;
+    if (sidebarTimer) clearTimeout(sidebarTimer);
+    sidebarTimer = null;
+    mostraSlide(0);
 }
 
-// ── Geocodifica indirizzo via Nominatim ──
-function geocodifica() {
-    var addr = document.getElementById('f_indirizzo').value.trim();
-    if (!addr) return;
-    var status = document.getElementById('geo-status');
-    status.textContent = '⏳ Ricerca...';
-    status.style.color = 'var(--sg-muted)';
-    fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(addr) + '&limit=1', {
-        headers: { 'Accept-Language': 'it' }
-    })
-    .then(r => r.json())
-    .then(function(data) {
-        if (data && data.length > 0) {
-            document.getElementById('f_lat').value = data[0].lat;
-            document.getElementById('f_lon').value = data[0].lon;
-            status.textContent = '✓ ' + data[0].display_name.split(',').slice(0,2).join(',');
-            status.style.color = 'var(--sg-green)';
+function mostraSlide(idx) {
+    if (!sidebarSlides.length) return;
+    idx = idx % sidebarSlides.length;
+    sidebarIndice = idx;
+    const slide = sidebarSlides[idx];
+    const cfg = (() => { try { return JSON.parse(slide.contenuto || '{}'); } catch(e) { return {}; } })();
+
+    const widget    = document.getElementById('sidebar-widget');
+    const sfondoEl  = document.getElementById('widget-sfondo');
+    const overlayEl = document.getElementById('widget-overlay');
+    const contentEl = document.getElementById('widget-content');
+
+    widget.classList.add('fade-out');
+    setTimeout(() => {
+        const colTesto = slide.colore_testo || '#ffffff';
+
+        if (slide.sfondo) {
+            sfondoEl.style.backgroundImage = `url('${BASE_URL}uploads/${slide.sfondo}')`;
+            sfondoEl.style.background = '';
+            overlayEl.style.display = 'block';
+        } else if (slide.sfondo_preset && PRESETS[slide.sfondo_preset]) {
+            sfondoEl.style.background = PRESETS[slide.sfondo_preset];
+            sfondoEl.style.backgroundImage = '';
+            overlayEl.style.display = 'none';
         } else {
-            status.textContent = '❌ Non trovato';
-            status.style.color = 'var(--sg-red)';
+            sfondoEl.style.backgroundImage = '';
+            sfondoEl.style.background = slide.colore_sfondo || '#111111';
+            overlayEl.style.display = 'none';
         }
-    })
-    .catch(function() {
-        status.textContent = '❌ Errore rete';
-        status.style.color = 'var(--sg-red)';
-    });
+        contentEl.style.color = colTesto;
+
+        switch (slide.tipo) {
+            case 'corsi':     renderCorsi(contentEl, slide, colTesto); break;
+            case 'countdown': renderCountdown(contentEl, slide, cfg, colTesto); break;
+            case 'meteo':     renderMeteo(contentEl, slide, cfg, colTesto); break;
+            case 'info':      renderInfo(contentEl, slide, cfg, colTesto); break;
+            default:          renderInfo(contentEl, slide, cfg, colTesto);
+        }
+
+        widget.classList.remove('fade-out');
+        widget.classList.add('fade-in');
+
+        if (sidebarTimer) clearTimeout(sidebarTimer);
+        sidebarTimer = setTimeout(() => mostraSlide(sidebarIndice + 1), (parseInt(slide.durata)||10) * 1000);
+    }, 600);
 }
-// ── Tipo display card selector ──
-document.querySelectorAll('.tipo-radio').forEach(function(radio) {
-    radio.addEventListener('change', function() {
-        document.querySelectorAll('.tipo-card').forEach(function(card) {
-            card.style.borderColor = 'rgba(255,255,255,0.08)';
-            card.style.background  = 'rgba(255,255,255,0.03)';
-        });
-        var colors = {tv:'#3b82f6', led:'#f59e0b', totem:'#8b5cf6'};
-        var c = colors[this.value] || '#3b82f6';
-        var card = this.parentElement.querySelector('.tipo-card');
-        card.style.borderColor = c;
-        card.style.background  = c + '18';
+
+// ── RENDER CORSI ─────────────────────────────────────────────────
+function renderCorsi(el, slide, colTesto) {
+    const oraOra  = new Date().getHours() * 60 + new Date().getMinutes();
+    const filtrati = corsiOggi.filter(c => {
+        const p = c.orario.split(':');
+        return (parseInt(p[0]) * 60 + parseInt(p[1]) + c.durata) > oraOra;
     });
+
+    let html = `<div class="widget-header">${slide.titolo || 'In programma oggi'}</div>`;
+    if (!filtrati.length) {
+        html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+            <div style="font-size:48px;">💪</div>
+            <div style="font-size:28px;font-weight:bold;text-align:center;line-height:1.4;">Buon<br>allenamento!</div>
+        </div>`;
+    } else {
+        let start = 0, attivoIdx = -1;
+        filtrati.forEach((c, i) => {
+            const p = c.orario.split(':'), s = parseInt(p[0])*60 + parseInt(p[1]);
+            if (s <= oraOra && oraOra < s + c.durata) attivoIdx = i;
+        });
+        start = Math.max(0, attivoIdx >= 0 ? attivoIdx - 1 : 0);
+        const end = Math.min(filtrati.length, start + 5);
+        if (end - start < 5) start = Math.max(0, end - 5);
+
+        html += `<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:0;">`;
+        for (let i = start; i < end; i++) {
+            const c = filtrati[i];
+            const p = c.orario.split(':'), s = parseInt(p[0])*60 + parseInt(p[1]);
+            const attivo = s <= oraOra && oraOra < s + c.durata;
+            const borderStyle = attivo ? `border-left:4px solid #e94560; padding-left:12px; background:rgba(233,69,96,0.08);` : 'padding-left:16px;';
+            html += `<div style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08); ${borderStyle}">
+                <div style="font-size:24px;opacity:${attivo?'1':'0.6'};font-weight:300;color:${attivo?'#e94560':colTesto};">${c.orario}</div>
+                <div style="font-size:28px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:${attivo?'#e94560':colTesto};">${c.corso}</div>
+                ${attivo ? `<div style="font-size:12px;letter-spacing:2px;color:#e94560;margin-top:2px;">▶ IN CORSO</div>` : ''}
+            </div>`;
+        }
+        html += `</div>`;
+    }
+    el.innerHTML = html;
+}
+
+// ── RENDER COUNTDOWN ─────────────────────────────────────────────
+function renderCountdown(el, slide, cfg, colTesto) {
+    const titolo = slide.titolo || 'Prossimo evento';
+    const dataTarget = cfg.data_target ? new Date(cfg.data_target) : null;
+    const messaggioPost = cfg.messaggio_post || 'Evento in corso!';
+
+    el.innerHTML = `<div class="widget-header">${titolo}</div>
+                    <div class="widget-countdown" id="countdown-content"></div>`;
+
+    function aggiorna() {
+        const content = document.getElementById('countdown-content');
+        if (!content) return;
+        if (!dataTarget) { content.innerHTML = `<div class="countdown-post">${messaggioPost}</div>`; return; }
+        const diff = dataTarget - new Date();
+        if (diff <= 0) { content.innerHTML = `<div class="countdown-post">${messaggioPost}</div>`; return; }
+
+        const giorni = Math.floor(diff / 86400000);
+        const ore    = Math.floor((diff % 86400000) / 3600000);
+        const minuti = Math.floor((diff % 3600000) / 60000);
+        const sec    = Math.floor((diff % 60000) / 1000);
+
+        let blocchi = '';
+        if (giorni > 0) blocchi += `<div class="countdown-blocco"><div class="countdown-num">${String(giorni).padStart(2,'0')}</div><div class="countdown-label">Giorni</div></div>`;
+        blocchi += `
+            <div class="countdown-blocco"><div class="countdown-num">${String(ore).padStart(2,'0')}</div><div class="countdown-label">Ore</div></div>
+            <div class="countdown-blocco"><div class="countdown-num">${String(minuti).padStart(2,'0')}</div><div class="countdown-label">Min</div></div>
+            <div class="countdown-blocco"><div class="countdown-num">${String(sec).padStart(2,'0')}</div><div class="countdown-label">Sec</div></div>`;
+
+        content.innerHTML = `
+            <div class="countdown-titolo">${cfg.titolo_evento || titolo}</div>
+            <div class="countdown-numeri">${blocchi}</div>`;
+    }
+    aggiorna();
+    const iv = setInterval(() => {
+        if (!document.getElementById('countdown-content')) { clearInterval(iv); return; }
+        aggiorna();
+    }, 1000);
+}
+
+// ── RENDER METEO ─────────────────────────────────────────────────
+const WMO_ICONS = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',71:'❄️',73:'❄️',75:'❄️',80:'🌦️',81:'🌧️',82:'⛈️',95:'⛈️',96:'⛈️',99:'⛈️'};
+const WMO_DESC  = {0:'Sereno',1:'Prevalenz. sereno',2:'Parz. nuvoloso',3:'Nuvoloso',45:'Nebbia',51:'Pioggerella',61:'Pioggia',65:'Pioggia intensa',71:'Neve',80:'Rovesci',95:'Temporale'};
+
+async function fetchMeteo(citta, lat, lon) {
+    const key = citta || `${lat},${lon}`;
+    if (meteoCache[key] && (Date.now() - meteoCache[key].ts < 1800000)) return meteoCache[key].data;
+    try {
+        let latitude = lat, longitude = lon;
+        if (!latitude || !longitude) {
+            const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(citta)}&count=1&language=it`);
+            const geoData = await geo.json();
+            if (!geoData.results?.length) return null;
+            latitude = geoData.results[0].latitude; longitude = geoData.results[0].longitude;
+        }
+        const res  = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weathercode,windspeed_10m,relativehumidity_2m&timezone=auto`);
+        const data = await res.json();
+        meteoCache[key] = { ts: Date.now(), data };
+        return data;
+    } catch(e) { return null; }
+}
+
+async function renderMeteo(el, slide, cfg, colTesto) {
+    const titolo = slide.titolo || cfg.citta || 'Meteo';
+    el.innerHTML = `<div class="widget-header">${titolo}</div><div class="widget-meteo"><div style="font-size:40px;opacity:0.5;">Caricamento...</div></div>`;
+    const data = await fetchMeteo(cfg.citta, cfg.lat, cfg.lon);
+    if (!data || !data.current) return;
+    const cur = data.current;
+    const wmo = cur.weathercode;
+    el.innerHTML = `
+        <div class="widget-header">${titolo}</div>
+        <div class="widget-meteo">
+            <div class="meteo-icona">${WMO_ICONS[wmo]||'🌡️'}</div>
+            <div class="meteo-temp">${Math.round(cur.temperature_2m)}°C</div>
+            <div class="meteo-desc">${WMO_DESC[wmo]||''}</div>
+            <div class="meteo-citta">${cfg.citta||''}</div>
+            <div class="meteo-dettagli"><span>💧 ${cur.relativehumidity_2m}%</span><span>💨 ${Math.round(cur.windspeed_10m)} km/h</span></div>
+        </div>`;
+}
+
+// ── RENDER INFO ───────────────────────────────────────────────────
+function renderInfo(el, slide, cfg, colTesto) {
+    const titolo = slide.titolo || '';
+    const icona  = cfg.icona || 'ℹ️';
+    const testo  = cfg.testo || '';
+    el.innerHTML = `
+        ${titolo ? `<div class="widget-header">${titolo}</div>` : ''}
+        <div class="widget-info" style="${!titolo ? 'justify-content:center;flex:1;' : ''}">
+            <div class="info-icona">${icona}</div>
+            <div class="info-testo">${testo.replace(/\n/g, '<br>')}</div>
+        </div>`;
+}
+
+// ── SCHERMO ───────────────────────────────────────────────────────
+function adattaSchermo() {
+    const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    const root  = document.getElementById('player-root');
+    root.style.transform = 'scale(' + scale + ')';
+    root.style.left = Math.round((window.innerWidth  - 1920 * scale) / 2) + 'px';
+    root.style.top  = Math.round((window.innerHeight - 1080 * scale) / 2) + 'px';
+}
+
+// ── OROLOGIO ─────────────────────────────────────────────────────
+function aggiornaOrologio() {
+    const now  = new Date();
+    const ora  = String(now.getHours()).padStart(2,'0') + ':' +
+                 String(now.getMinutes()).padStart(2,'0') + ':' +
+                 String(now.getSeconds()).padStart(2,'0');
+    const data = GIORNI_IT[now.getDay()] + '  ' +
+                 now.getDate() + ' ' + MESI[now.getMonth()] + ' ' + now.getFullYear();
+    document.getElementById('banner-ora-dx').textContent      = ora;
+    document.getElementById('banner-data-centro').textContent = data;
+}
+
+// ── SEGNALE TV ───────────────────────────────────────────────────
+async function avviaSegnaleTV() {
+    try {
+        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const capture = devices.find(d => d.kind === 'videoinput');
+        if (!capture) return;
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: capture.deviceId } }, audio: true
+        });
+        const v = document.getElementById('tv-video');
+        v.srcObject = stream; v.play();
+        document.getElementById('tv-placeholder').style.display = 'none';
+    } catch(e) {}
+}
+
+// ── BANNER ───────────────────────────────────────────────────────
+function applicaBanner(banner) {
+    const el      = document.getElementById('layer-banner');
+    const altezza = parseInt(banner.banner_altezza) || 80;
+    const pos     = banner.banner_posizione || 'bottom';
+    bannerColore      = banner.banner_colore       || '#000000';
+    bannerTestoColore = banner.banner_testo_colore || '#ffffff';
+    el.style.height  = altezza + 'px';
+    el.style.padding = '0 ' + Math.round(altezza * 0.25) + 'px';
+    el.style.gap     = Math.round(altezza * 0.25) + 'px';
+    const mainEl = document.getElementById('main');
+    if (pos === 'top') {
+        el.style.top = '0'; el.style.bottom = 'auto';
+        mainEl.style.top = altezza + 'px'; mainEl.style.height = (1080 - altezza) + 'px';
+    } else {
+        el.style.bottom = '0'; el.style.top = 'auto';
+        mainEl.style.top = '0'; mainEl.style.height = (1080 - altezza) + 'px';
+    }
+    const logo = document.getElementById('banner-logo');
+    if (banner.logo) {
+        logo.src = BASE_URL + 'assets/img/' + banner.logo;
+        logo.style.display = 'block';
+        logo.style.height  = Math.round(altezza * 0.75) + 'px';
+        logo.style.width   = 'auto';
+    } else { logo.style.display = 'none'; }
+    document.getElementById('banner-ora-dx').style.fontSize      = Math.round(altezza * 0.44) + 'px';
+    document.getElementById('banner-data-centro').style.fontSize = Math.round(altezza * 0.28) + 'px';
+    if (modalitaAttuale !== 'adv') {
+        el.style.backgroundColor = bannerColore;
+        el.style.color = bannerTestoColore;
+        document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
+        document.getElementById('banner-data-centro').style.visibility = 'visible';
+        document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
+        document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
+        const ora = document.getElementById('banner-ora-dx');
+        ora.style.color = bannerTestoColore; ora.style.textShadow = '';
+        ora.style.backgroundColor = ''; ora.style.borderRadius = ''; ora.style.padding = '';
+    }
+}
+
+// ── MODALITÀ TV ──────────────────────────────────────────────────
+function mostraTV() {
+    modalitaAttuale = 'tv';
+    document.getElementById('layer-adv').style.display = 'none';
+    document.getElementById('main').style.display      = 'flex';
+    const banner = document.getElementById('layer-banner');
+    banner.style.backgroundColor = bannerColore;
+    document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
+    document.getElementById('banner-data-centro').style.visibility = 'visible';
+    document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
+    document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
+    const ora = document.getElementById('banner-ora-dx');
+    ora.style.opacity = '1'; ora.style.color = bannerTestoColore;
+    ora.style.textShadow = ''; ora.style.backgroundColor = '';
+    ora.style.borderRadius = ''; ora.style.padding = '';
+    const video = document.getElementById('adv-video');
+    video.pause(); video.src = '';
+    if (advTimer) { clearTimeout(advTimer); advTimer = null; }
+}
+
+// ── MODALITÀ ADV ─────────────────────────────────────────────────
+function mostraADV(stato) {
+    modalitaAttuale = 'adv';
+    contenuti = [...(stato.contenuti || [])];
+    indiceContenuto = 0;
+    if (stato.contenuto_ora) {
+        const idx = contenuti.findIndex(c => c.id === stato.contenuto_ora.id);
+        if (idx >= 0) indiceContenuto = idx;
+    }
+    document.getElementById('main').style.display      = 'none';
+    document.getElementById('layer-adv').style.display = 'block';
+    const banner = document.getElementById('layer-banner');
+    banner.style.backgroundColor = 'transparent';
+    document.getElementById('banner-logo-wrap').style.visibility   = 'hidden';
+    document.getElementById('banner-data-centro').style.visibility = 'hidden';
+    document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'hidden');
+    const ora = document.getElementById('banner-ora-dx');
+    ora.style.opacity = '1'; ora.style.color = '#ffffff';
+    ora.style.textShadow = '0 0 8px rgba(0,0,0,0.9)';
+    ora.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    ora.style.borderRadius = '6px'; ora.style.padding = '4px 14px';
+    mostraContenuto(indiceContenuto);
+}
+
+// ── CONTENUTO ADV ────────────────────────────────────────────────
+function mostraContenuto(idx) {
+    if (!contenuti.length) { mostraTV(); return; }
+    idx = idx % contenuti.length; indiceContenuto = idx;
+    const c = contenuti[idx];
+    const video    = document.getElementById('adv-video');
+    const immagine = document.getElementById('adv-immagine');
+    const url = BASE_URL + 'uploads/' + c.file;
+    if (c.tipo === 'video') {
+        immagine.style.display = 'none'; video.style.display = 'block';
+        video.muted = true; video.volume = 0; video.defaultMuted = true;
+        video.setAttribute('muted', '');
+        video.src = url; video.load();
+        video.addEventListener('canplay', function h() {
+            video.removeEventListener('canplay', h); video.play().catch(() => {});
+        });
+        video.onended = () => mostraContenuto(indiceContenuto + 1);
+    } else {
+        video.pause(); video.src = ''; video.style.display = 'none';
+        immagine.style.display = 'block'; immagine.src = url;
+        if (advTimer) clearTimeout(advTimer);
+        advTimer = setTimeout(() => mostraContenuto(indiceContenuto + 1), (c.durata||10) * 1000);
+    }
+}
+
+// ── CORSI ────────────────────────────────────────────────────────
+async function caricaCorsi() {
+    if (!SHEET_URL) { setTimeout(caricaCorsi, 3600000); return; }
+    try {
+        const res  = await fetch(SHEET_URL + '&t=' + Date.now());
+        const text = await res.text();
+        const rows = text.trim().split('\n').slice(1);
+        const oggi = GIORNI_IT[new Date().getDay()];
+        const oraOra = new Date().getHours() * 60 + new Date().getMinutes();
+        const corsiAll = rows.map(row => {
+            const cols  = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || row.split(',');
+            const clean = cols.map(c => c ? c.trim().replace(/^"|"$/g, '') : '');
+            return { giorno:clean[0]||'', orario:clean[1]||'', corso:clean[2]||'', club:clean[3]||'', durata:parseInt(clean[4])||60 };
+        });
+        corsiOggi = corsiAll.filter(c => {
+            if (c.giorno !== oggi) return false;
+            if (CLUB && c.club.toLowerCase() !== CLUB.toLowerCase()) return false;
+            const p = c.orario.split(':');
+            return (parseInt(p[0]) * 60 + parseInt(p[1]) + c.durata) > oraOra;
+        }).sort((a, b) => a.orario.localeCompare(b.orario));
+        setTimeout(caricaCorsi, 3600000);
+    } catch(e) { setTimeout(caricaCorsi, 60000); }
+}
+
+// ── API POLLING ──────────────────────────────────────────────────
+let slidesSerializ = '';
+
+async function aggiornaDaAPI() {
+    try {
+        const res   = await fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&t=' + Date.now());
+        if (!res.ok) throw new Error();
+        const stato = await res.json();
+        if (stato.errore) { setTimeout(aggiornaDaAPI, 15000); return; }
+        if (stato.banner) applicaBanner(stato.banner);
+
+        if (stato.sidebar_slides) {
+            const nuove = JSON.stringify(stato.sidebar_slides);
+            if (nuove !== slidesSerializ) {
+                slidesSerializ = nuove;
+                avviaSidebar(stato.sidebar_slides);
+            }
+        }
+
+        const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
+        if (stato.modalita === 'tv') {
+            if (cambiata) mostraTV();
+            setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
+        } else if (stato.modalita === 'adv') {
+            if (cambiata) mostraADV(stato);
+            setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_tv || 60) * 1000, 30000));
+        }
+        statoCorrente = stato;
+    } catch(e) { setTimeout(aggiornaDaAPI, 15000); }
+}
+
+// ── INIT ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    adattaSchermo();
+    window.addEventListener('resize', adattaSchermo);
+    aggiornaOrologio();
+    setInterval(aggiornaOrologio, 1000);
+    avviaSegnaleTV();
+    caricaCorsi().then(() => {
+        avviaSidebar([{ tipo:'corsi', titolo:'In programma oggi', durata:30,
+                        colore_sfondo:'#111111', colore_testo:'#ffffff', sfondo:'', sfondo_preset:'', contenuto:'{}' }]);
+    });
+    setTimeout(aggiornaDaAPI, 500);
 });
 </script>
-
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
+</body>
+</html>
