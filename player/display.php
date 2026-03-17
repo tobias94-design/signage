@@ -244,16 +244,13 @@ function mostraSlide(idx) {
         const colTesto = slide.colore_testo || '#ffffff';
 
         if (slide.sfondo) {
-            sfondoEl.style.backgroundImage = `url('${BASE_URL}uploads/${slide.sfondo}')`;
-            sfondoEl.style.background = '';
+            sfondoEl.style.cssText = `position:absolute;inset:0;background-size:cover;background-position:center;z-index:0;background-image:url('${BASE_URL}uploads/${slide.sfondo}')`;
             overlayEl.style.display = 'block';
         } else if (slide.sfondo_preset && PRESETS[slide.sfondo_preset]) {
-            sfondoEl.style.background = PRESETS[slide.sfondo_preset];
-            sfondoEl.style.backgroundImage = '';
+            sfondoEl.style.cssText = `position:absolute;inset:0;background-size:cover;background-position:center;z-index:0;background:${PRESETS[slide.sfondo_preset]}`;
             overlayEl.style.display = 'none';
         } else {
-            sfondoEl.style.backgroundImage = '';
-            sfondoEl.style.background = slide.colore_sfondo || '#111111';
+            sfondoEl.style.cssText = `position:absolute;inset:0;z-index:0;background:${slide.colore_sfondo || '#111111'}`;
             overlayEl.style.display = 'none';
         }
         contentEl.style.color = colTesto;
