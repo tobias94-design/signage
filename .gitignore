@@ -6,3 +6,4 @@ assets/img/logo_*
 database.sqlite
 .DS_Store
 cache/
+deploy.sh
