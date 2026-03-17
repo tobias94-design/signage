@@ -27,8 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
         $filename     = uniqid() . '.' . $estensione;
         $destinazione = __DIR__ . '/uploads/' . $filename;
         if (move_uploaded_file($file['tmp_name'], $destinazione)) {
-            $stmt = $db->prepare('INSERT INTO contenuti (nome, tipo, file, durata) VALUES (?, ?, ?, ?)');
-            $stmt->execute([$nome, $tipo, $filename, $durata]);
+            $ins_id = (int)($_POST['inserzionista_id'] ?? 0) ?: null;
+            $stmt = $db->prepare('INSERT INTO contenuti (nome, tipo, file, durata, inserzionista_id) VALUES (?, ?, ?, ?, ?)');
+            $stmt->execute([$nome, $tipo, $filename, $durata, $ins_id]);
             $messaggio = 'ok|Contenuto caricato con successo!';
         } else {
             $messaggio = 'errore|Errore durante il caricamento del file.';
@@ -47,7 +48,8 @@ if (isset($_GET['elimina'])) {
     exit;
 }
 
-$contenuti = $db->query('SELECT * FROM contenuti ORDER BY creato_il DESC')->fetchAll(PDO::FETCH_ASSOC);
+$contenuti = $db->query('SELECT c.*, i.ragione_sociale FROM contenuti c LEFT JOIN inserzionisti i ON i.id = c.inserzionista_id ORDER BY c.creato_il DESC')->fetchAll(PDO::FETCH_ASSOC);
+$inserzionisti = $db->query("SELECT id, ragione_sociale FROM inserzionisti WHERE attivo=1 ORDER BY ragione_sociale")->fetchAll(PDO::FETCH_ASSOC);
 $titolo    = 'Contenuti';
 require_once 'includes/header.php';
 ?>
@@ -73,6 +75,15 @@ require_once 'includes/header.php';
                     <input type="number" name="durata" value="10" min="1" max="300">
                 </div>
                 <div>
+                    <label>Inserzionista</label>
+                    <select name="inserzionista_id">
+                        <option value="">— Nessuno —</option>
+                        <?php foreach ($inserzionisti as $i): ?>
+                        <option value="<?= $i['id'] ?>"><?= htmlspecialchars($i['ragione_sociale']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
                     <label>File (video o immagine)</label>
                     <input type="file" name="file" id="fileInput" accept="video/*,image/*" required>
                 </div>
@@ -94,6 +105,7 @@ require_once 'includes/header.php';
                 <th>Preview</th>
                 <th>Nome</th>
                 <th>Tipo</th>
+                <th>Inserzionista</th>
                 <th>Durata</th>
                 <th>Caricato il</th>
                 <th>Azioni</th>
@@ -109,6 +121,13 @@ require_once 'includes/header.php';
                 </td>
                 <td><?php echo htmlspecialchars($c['nome']); ?></td>
                 <td><span class="badge badge-<?php echo $c['tipo']; ?>"><?php echo strtoupper($c['tipo']); ?></span></td>
+                <td>
+                    <?php if ($c['ragione_sociale']): ?>
+                    <a href="/report_adv.php?ins=<?= $c['inserzionista_id'] ?>" style="color:var(--sg-orange);font-size:12px;"><?= htmlspecialchars($c['ragione_sociale']) ?></a>
+                    <?php else: ?>
+                    <span style="color:var(--sg-muted);font-size:12px;">—</span>
+                    <?php endif; ?>
+                </td>
                 <td><?php echo $c['tipo'] === 'video' ? '▶ intero' : $c['durata'] . 's'; ?></td>
                 <td><?php echo date('d/m/Y H:i', strtotime($c['creato_il'])); ?></td>
                 <td>

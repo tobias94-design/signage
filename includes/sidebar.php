@@ -12,14 +12,16 @@ try {
 } catch(Exception $e) {}
 
 $voci = [
-    'index.php'       => ['icona'=>'⊞', 'label'=>'Dashboard',   'sezione'=>'principale'],
-    'contenuti.php'   => ['icona'=>'▤',  'label'=>'Contenuti',   'sezione'=>'principale'],
-    'playlist.php'    => ['icona'=>'⊟',  'label'=>'Playlist',    'sezione'=>'principale'],
-    'profili.php'     => ['icona'=>'◈',  'label'=>'Profili',     'sezione'=>'principale'],
-    'club.php'        => ['icona'=>'⬡',  'label'=>'Club',        'sezione'=>'principale'],
-    'dispositivi.php' => ['icona'=>'▦',  'label'=>'Dispositivi', 'sezione'=>'principale', 'badge'=>$badge_disp>0?$badge_disp:null],
-    'layout.php'      => ['icona'=>'▣',  'label'=>'Layout',      'sezione'=>'sistema'],
-    'utenti.php'      => ['icona'=>'👥', 'label'=>'Utenti',      'sezione'=>'sistema', 'admin_only'=>true],
+    'index.php'          => ['icona'=>'⊞', 'label'=>'Dashboard',      'sezione'=>'principale'],
+    'contenuti.php'      => ['icona'=>'▤',  'label'=>'Contenuti',      'sezione'=>'principale'],
+    'playlist.php'       => ['icona'=>'⊟',  'label'=>'Playlist',       'sezione'=>'principale'],
+    'profili.php'        => ['icona'=>'◈',  'label'=>'Profili',        'sezione'=>'principale'],
+    'club.php'           => ['icona'=>'⬡',  'label'=>'Club',           'sezione'=>'principale'],
+    'dispositivi.php'    => ['icona'=>'▦',  'label'=>'Dispositivi',    'sezione'=>'principale', 'badge'=>$badge_disp>0?$badge_disp:null],
+    'layout.php'         => ['icona'=>'▣',  'label'=>'Layout',         'sezione'=>'principale'],
+    'inserzionisti.php'  => ['icona'=>'🏢', 'label'=>'Inserzionisti',  'sezione'=>'adv'],
+    'report_adv.php'     => ['icona'=>'📊', 'label'=>'Report ADV',     'sezione'=>'adv'],
+    'utenti.php'         => ['icona'=>'👥', 'label'=>'Utenti',         'sezione'=>'sistema', 'admin_only'=>true],
 ];
 ?>
 
@@ -45,6 +47,17 @@ $voci = [
     <?php foreach ($voci as $file => $voce):
         if ($voce['sezione'] !== 'sistema') continue;
         if (!empty($voce['admin_only']) && !isAdmin()) continue;
+        $attiva = ($pagina_corrente === $file) ? 'active' : '';
+    ?>
+    <a href="/<?= $file ?>" class="sb-item <?= $attiva ?>">
+        <span class="sb-icon"><?= $voce['icona'] ?></span>
+        <span class="sb-label"><?= $voce['label'] ?></span>
+    </a>
+    <?php endforeach; ?>
+
+    <div class="sb-section">Pubblicità</div>
+    <?php foreach ($voci as $file => $voce):
+        if ($voce['sezione'] !== 'adv') continue;
         $attiva = ($pagina_corrente === $file) ? 'active' : '';
     ?>
     <a href="/<?= $file ?>" class="sb-item <?= $attiva ?>">

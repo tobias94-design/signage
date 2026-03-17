@@ -19,6 +19,17 @@ if (!$dispositivo) { echo json_encode(['errore' => 'Dispositivo non trovato']); 
 $db->prepare('UPDATE dispositivi SET stato = ?, ultimo_ping = CURRENT_TIMESTAMP WHERE token = ?')
    ->execute(['online', $token]);
 
+// ── LOG PASSAGGIO ADV (se il player segnala un contenuto in corso) ──
+if (!empty($_GET['log_contenuto'])) {
+    $cid    = (int)$_GET['log_contenuto'];
+    $dur    = (int)($_GET['log_durata'] ?? 0);
+    $club   = $dispositivo['club'] ?? '';
+    try {
+        $db->prepare('INSERT INTO log_adv (contenuto_id, dispositivo_token, club, durata_sec) VALUES (?,?,?,?)')
+           ->execute([$cid, $token, $club, $dur]);
+    } catch(Exception $e) {}
+}
+
 if (!$dispositivo['profilo_id']) {
     $risposta = ['modalita' => 'tv', 'banner' => getBanner($db), 'sidebar_slides' => []];
     salvaCache($cache_file, $risposta);

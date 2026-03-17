@@ -533,6 +533,12 @@ function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
     idx = idx % contenuti.length; indiceContenuto = idx;
     const c = contenuti[idx];
+
+    // Log passaggio ADV
+    const durata = c.tipo === 'video' ? 30 : (c.durata || 10);
+    fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&log_contenuto=' + c.id + '&log_durata=' + durata)
+        .catch(() => {});
+
     const video    = document.getElementById('adv-video');
     const immagine = document.getElementById('adv-immagine');
     const url = BASE_URL + 'uploads/' + c.file;
