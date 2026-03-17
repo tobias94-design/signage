@@ -142,7 +142,19 @@ def launch_chrome(token):
         f'--user-data-dir={os.path.join(os.path.dirname(CONFIG_FILE), "chrome_profile")}',
         player_url
     ]
-    return subprocess.Popen(args)
+    proc = subprocess.Popen(args)
+    # Chiudi finestre Esplora Risorse aperte
+    try:
+        import time
+        time.sleep(2)
+        subprocess.Popen(
+            ['powershell', '-WindowStyle', 'Hidden', '-Command',
+             '$shell = New-Object -ComObject Shell.Application; $shell.Windows() | ForEach-Object { $_.Quit() }'],
+            creationflags=0x08000000  # CREATE_NO_WINDOW
+        )
+    except Exception:
+        pass
+    return proc
 
 def ping_server(token):
     api_get(f'/api/stato.php?token={urllib.parse.quote(token)}&t={int(time.time())}')

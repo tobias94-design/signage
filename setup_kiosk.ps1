@@ -31,12 +31,40 @@ reg add "HKCU\Control Panel\Desktop" /v ScreenSaveActive /t REG_SZ /d 0 /f | Out
 
 # ── 6. PUNTATORE MOUSE ───────────────────────────────────────
 Write-Host "Nascondo cursore mouse..." -ForegroundColor Yellow
-# Cursore invisibile tramite registro
+# Cursore completamente invisibile
 $CursorPath = "HKCU\Control Panel\Cursors"
 reg add $CursorPath /v "" /t REG_SZ /d "" /f | Out-Null
 reg add $CursorPath /v "Arrow" /t REG_SZ /d "" /f | Out-Null
 reg add $CursorPath /v "Hand" /t REG_SZ /d "" /f | Out-Null
 reg add $CursorPath /v "Wait" /t REG_SZ /d "" /f | Out-Null
+reg add $CursorPath /v "IBeam" /t REG_SZ /d "" /f | Out-Null
+reg add $CursorPath /v "SizeAll" /t REG_SZ /d "" /f | Out-Null
+reg add $CursorPath /v "SizeNESW" /t REG_SZ /d "" /f | Out-Null
+reg add $CursorPath /v "SizeNS" /t REG_SZ /d "" /f | Out-Null
+reg add $CursorPath /v "SizeNWSE" /t REG_SZ /d "" /f | Out-Null
+reg add $CursorPath /v "SizeWE" /t REG_SZ /d "" /f | Out-Null
+reg add $CursorPath /v "UpArrow" /t REG_SZ /d "" /f | Out-Null
+reg add $CursorPath /v "Crosshair" /t REG_SZ /d "" /f | Out-Null
+reg add $CursorPath /v "NWPen" /t REG_SZ /d "" /f | Out-Null
+reg add $CursorPath /v "No" /t REG_SZ /d "" /f | Out-Null
+reg add $CursorPath /v "AppStarting" /t REG_SZ /d "" /f | Out-Null
+# Applica subito senza riavvio
+$code = @"
+[DllImport("user32.dll")] public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+"@
+Add-Type -MemberDefinition $code -Name CursorFix -Namespace Win32
+[Win32.CursorFix]::SystemParametersInfo(0x0057, 0, $null, 3) | Out-Null
+
+# ── 6b. CHIUDI ESPLORA RISORSE ────────────────────────────────
+Write-Host "Chiudo Esplora Risorse..." -ForegroundColor Yellow
+Get-Process -Name "explorer" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
+# Riavvia Explorer in background (serve per il registro)
+Start-Process "explorer.exe" -WindowStyle Hidden
+Start-Sleep -Seconds 2
+# Chiudi tutte le finestre aperte di Explorer
+$shell = New-Object -ComObject Shell.Application
+$shell.Windows() | ForEach-Object { $_.Quit() }
 
 # ── 7. BLUETOOTH POPUP ───────────────────────────────────────
 Write-Host "Disabilito popup Bluetooth..." -ForegroundColor Yellow
@@ -94,5 +122,27 @@ if (Test-Path $exePath) {
 Write-Host ""
 Write-Host "=== Setup completato! ===" -ForegroundColor Green
 Write-Host "Riavvia il PC per applicare tutte le modifiche." -ForegroundColor White
+Write-Host ""
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor DarkYellow
+Write-Host "  IMPORTANTE — IMPOSTAZIONE BIOS" -ForegroundColor Yellow
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor DarkYellow
+Write-Host ""
+Write-Host "  Per far riaccendere il PC automaticamente dopo" -ForegroundColor White
+Write-Host "  un'interruzione di corrente:" -ForegroundColor White
+Write-Host ""
+Write-Host "  1. Riavvia il PC e premi F2 / DEL / F10" -ForegroundColor Cyan
+Write-Host "     (dipende dal produttore) per entrare nel BIOS" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  2. Cerca una di queste opzioni:" -ForegroundColor Cyan
+Write-Host "     • Power On After Power Loss  →  Power On" -ForegroundColor Green
+Write-Host "     • Restore on AC Power Loss   →  Power On" -ForegroundColor Green
+Write-Host "     • After Power Failure        →  Power On" -ForegroundColor Green
+Write-Host ""
+Write-Host "  3. Salva e esci dal BIOS (F10 o Save & Exit)" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Senza questa impostazione il PC NON si riaccende" -ForegroundColor Red
+Write-Host "  automaticamente dopo un blackout." -ForegroundColor Red
+Write-Host ""
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor DarkYellow
 Write-Host ""
 pause
