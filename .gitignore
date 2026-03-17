@@ -5,3 +5,4 @@ assets/img/logo_*
 *.avi
 database.sqlite
 .DS_Store
+cache/
