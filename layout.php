@@ -69,6 +69,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['azione'])) {
     $dev_token = $_POST['dev_token'] ?? '';
 
     if ($_POST['azione'] === 'aggiungi_slide') {
+        // DEBUG TEMPORANEO
+        error_log("POST aggiungi_slide: sfondo_preset=" . ($_POST['sfondo_preset'] ?? 'NON PRESENTE') . " colore_sfondo=" . ($_POST['colore_sfondo'] ?? ''));
         $tipo      = $_POST['tipo'] ?? 'info';
         $titolo    = trim($_POST['titolo'] ?? '');
         $durata    = max(3, (int)($_POST['durata'] ?? 10));
@@ -382,7 +384,7 @@ require_once 'includes/header.php';
                         <div><label>Testo</label><input type="color" name="colore_testo" value="#ffffff" style="width:100%;height:38px;cursor:pointer;"></div>
                     </div>
                     <label>Preset sfondo</label>
-                    <select name="sfondo_preset" id="sfondoPreset">
+                    <select name="sfondo_preset" id="sfondoPreset" onchange="aggiornaPreset(this.value)">
                         <?php foreach ($presets as $k=>$p): ?>
                         <option value="<?= $k ?>"><?= $p['label'] ?></option>
                         <?php endforeach; ?>
@@ -752,6 +754,14 @@ aggiornaCampi();
 
 // ── Preset sfondo preview ──
 var presetMap=<?php $pm=[];foreach($presets as $k=>$p)$pm[$k]=$p['css'];echo json_encode($pm);?>;
+
+function aggiornaPreset(val) {
+    var prev = document.getElementById('presetPreview');
+    if (!prev) return;
+    var css = presetMap[val] || '';
+    prev.style.cssText = (css ? css : 'background:rgba(255,255,255,0.04)') + ';border-radius:8px;height:32px;transition:all 0.2s;';
+}
+
 var sfondoPreset=document.getElementById('sfondoPreset');
 if(sfondoPreset){
     sfondoPreset.addEventListener('change',function(){
