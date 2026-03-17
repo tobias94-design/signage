@@ -6,6 +6,28 @@ $db = getDB();
 
 $msg = '';
 
+// Auto-scadenza: contratto scaduto → stato scaduto
+$db->exec("UPDATE contratti SET stato='scaduto' WHERE data_fine < date('now') AND stato='attivo'");
+
+// Inserzionista inattivo se TUTTI i suoi contratti sono scaduti/sospesi (e ne aveva almeno uno)
+$db->exec("
+    UPDATE inserzionisti SET attivo=0
+    WHERE id IN (
+        SELECT inserzionista_id FROM contratti
+        GROUP BY inserzionista_id
+        HAVING COUNT(*) > 0
+        AND COUNT(CASE WHEN stato='attivo' THEN 1 END) = 0
+    )
+");
+
+// Inserzionista torna attivo se ha almeno un contratto attivo
+$db->exec("
+    UPDATE inserzionisti SET attivo=1
+    WHERE id IN (
+        SELECT inserzionista_id FROM contratti WHERE stato='attivo'
+    )
+");
+
 // ── AZIONI POST ──────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $az = $_POST['azione'] ?? '';
@@ -82,8 +104,10 @@ if (isset($_GET['del_con'])) {
 
 // ── DATI ──────────────────────────────────────────────────────────
 $tab = $_GET['tab'] ?? 'inserzionisti';
-$edit_ins = isset($_GET['edit_ins']) ? (int)$_GET['edit_ins'] : 0;
-$edit_con = isset($_GET['edit_con']) ? (int)$_GET['edit_con'] : 0;
+$edit_ins_raw = $_GET['edit_ins'] ?? '';
+$edit_ins     = ($edit_ins_raw === 'new') ? -1 : (int)$edit_ins_raw;
+$edit_con_raw = $_GET['edit_con'] ?? '';
+$edit_con     = ($edit_con_raw === 'new') ? -1 : (int)$edit_con_raw;
 
 $inserzionisti = $db->query("SELECT i.*, 
     COUNT(DISTINCT c.id) as n_contratti,
@@ -104,8 +128,8 @@ $contratti = $db->query("SELECT c.*, i.ragione_sociale,
 
 $clubs = $db->query("SELECT DISTINCT club FROM dispositivi WHERE club != '' ORDER BY club")->fetchAll(PDO::FETCH_COLUMN);
 
-$ins_edit = $edit_ins ? $db->query("SELECT * FROM inserzionisti WHERE id=$edit_ins")->fetch(PDO::FETCH_ASSOC) : null;
-$con_edit = $edit_con ? $db->query("SELECT * FROM contratti WHERE id=$edit_con")->fetch(PDO::FETCH_ASSOC) : null;
+$ins_edit = ($edit_ins > 0) ? $db->query("SELECT * FROM inserzionisti WHERE id=$edit_ins")->fetch(PDO::FETCH_ASSOC) : null;
+$con_edit = ($edit_con > 0) ? $db->query("SELECT * FROM contratti WHERE id=$edit_con")->fetch(PDO::FETCH_ASSOC) : null;
 
 $settori = ['Fitness','Food & Beverage','Abbigliamento','Integratori','Benessere','Tecnologia','Assicurazioni','Immobiliare','Automotive','Altro'];
 
@@ -172,7 +196,7 @@ require_once 'includes/header.php';
             </div>
             <div>
                 <label>Telefono</label>
-                <input type="tel" name="telefono" value="<?= htmlspecialchars($ins_edit['telefono']??'') ?>">
+                <input type="text" name="telefono" value="<?= htmlspecialchars($ins_edit['telefono']??'') ?>" placeholder="+39 000 0000000" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:#fff;font-size:14px;margin-bottom:12px;">
             </div>
         </div>
         <div style="margin-bottom:12px;">
@@ -219,10 +243,12 @@ require_once 'includes/header.php';
             <td><a href="/inserzionisti.php?tab=contratti" style="color:var(--sg-orange);"><?= $i['n_contratti'] ?> contratti</a></td>
             <td><a href="/contenuti.php" style="color:var(--sg-muted);"><?= $i['n_contenuti'] ?> contenuti</a></td>
             <td>
-                <button onclick="toggleIns(<?= $i['id'] ?>, <?= $i['attivo']?0:1 ?>, this)"
-                        class="btn btn-sm" style="font-size:10px;padding:3px 8px;background:<?= $i['attivo']?'rgba(48,209,88,0.15)':'rgba(255,255,255,0.04)' ?>;color:<?= $i['attivo']?'var(--sg-green)':'var(--sg-muted)' ?>;border:1px solid <?= $i['attivo']?'rgba(48,209,88,0.2)':'rgba(255,255,255,0.08)' ?>;">
-                    <?= $i['attivo']?'● Attivo':'○ Inattivo' ?>
-                </button>
+                <?php $cs = $i['attivo']
+                    ? ['bg'=>'rgba(48,209,88,0.12)', 'col'=>'var(--sg-green)','label'=>'Attivo']
+                    : ['bg'=>'rgba(255,69,58,0.10)',  'col'=>'var(--sg-red)',  'label'=>'Inattivo']; ?>
+                <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:12px;background:<?= $cs['bg'] ?>;color:<?= $cs['col'] ?>;">
+                    <?= $cs['label'] ?>
+                </span>
             </td>
             <td>
                 <a href="/inserzionisti.php?tab=inserzionisti&edit_ins=<?= $i['id'] ?>" class="btn btn-sm btn-secondary">✏</a>
@@ -398,12 +424,29 @@ require_once 'includes/header.php';
 <?php endif; ?>
 </div>
 
+<style>
+input[type=tel] {
+    width:100%; padding:10px 12px;
+    background:rgba(255,255,255,0.055) !important;
+    border:1px solid rgba(255,255,255,0.10) !important;
+    border-radius:10px; color:#fff !important; font-size:14px;
+    margin-bottom:12px;
+}
+input[type=date] { cursor:pointer; }
+input[type=date]::-webkit-calendar-picker-indicator { cursor:pointer; width:100%; opacity:0.01; position:absolute; right:0; }
+input[type=date] { position:relative; }
+</style>
 <script>
 function toggleIns(id, val, btn) {
     const fd = new FormData();
     fd.append('azione','toggle_ins'); fd.append('id',id); fd.append('val',val);
     fetch('/inserzionisti.php',{method:'POST',body:fd}).then(()=>location.reload());
 }
+
+// Apri calendario cliccando ovunque sull'input date
+document.querySelectorAll('input[type=date]').forEach(el => {
+    el.addEventListener('click', function() { try { this.showPicker(); } catch(e) {} });
+});
 </script>
 
 <?php require_once 'includes/footer.php'; ?>

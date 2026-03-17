@@ -273,3 +273,8 @@ require_once 'includes/header.php';
 </div>
 
 <?php require_once 'includes/footer.php'; ?>
+<script>
+document.querySelectorAll('input[type=date]').forEach(el => {
+    el.addEventListener('click', function() { try { this.showPicker(); } catch(e) {} });
+});
+</script>

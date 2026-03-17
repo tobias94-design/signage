@@ -144,7 +144,7 @@ require_once 'includes/header.php';
 </div>
 
 <style>
-.form-grid { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 12px; align-items: end; }
+.form-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
 .preview { width: 80px; height: 50px; object-fit: cover; border-radius: 4px; }
 </style>
 
