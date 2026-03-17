@@ -26,7 +26,7 @@ $sheet_url = $dispositivo['sheet_url'] ?? '';
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none !important; }
 
         html, body {
             width: 100vw; height: 100vh;
