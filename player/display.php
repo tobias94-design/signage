@@ -451,14 +451,38 @@ function applicaBanner(banner) {
     el.style.height  = altezza + 'px';
     el.style.padding = '0 ' + Math.round(altezza * 0.25) + 'px';
     el.style.gap     = Math.round(altezza * 0.25) + 'px';
-    const mainEl = document.getElementById('main');
+
+    const mainEl    = document.getElementById('main');
+    const sideEl    = document.getElementById('colonna-corsi');
+    const altMain   = 1080 - altezza;
+
     if (pos === 'top') {
         el.style.top = '0'; el.style.bottom = 'auto';
-        mainEl.style.top = altezza + 'px'; mainEl.style.height = (1080 - altezza) + 'px';
+        mainEl.style.top = altezza + 'px'; mainEl.style.height = altMain + 'px';
     } else {
         el.style.bottom = '0'; el.style.top = 'auto';
-        mainEl.style.top = '0'; mainEl.style.height = (1080 - altezza) + 'px';
+        mainEl.style.top = '0'; mainEl.style.height = altMain + 'px';
     }
+
+    // Sidebar dinamica: la TV deve rimanere 16:9
+    // TV_width = altMain * 16/9 → sidebar = 1920 - TV_width
+    if (sideEl) {
+        const tvWidth      = Math.round(altMain * 16 / 9);
+        const sidebarWidth = 1920 - tvWidth;
+        sideEl.style.width = sidebarWidth + 'px';
+    }
+
+    // Aggiorna anche layer-adv con la stessa altezza main
+    const advEl = document.getElementById('layer-adv');
+    if (advEl) {
+        if (pos === 'top') {
+            advEl.style.top = altezza + 'px'; advEl.style.bottom = '0';
+        } else {
+            advEl.style.top = '0'; advEl.style.bottom = altezza + 'px';
+        }
+        advEl.style.height = altMain + 'px';
+    }
+
     const logo = document.getElementById('banner-logo');
     if (banner.logo) {
         logo.src = BASE_URL + 'assets/img/' + banner.logo;
@@ -466,8 +490,10 @@ function applicaBanner(banner) {
         logo.style.height  = Math.round(altezza * 0.75) + 'px';
         logo.style.width   = 'auto';
     } else { logo.style.display = 'none'; }
+
     document.getElementById('banner-ora-dx').style.fontSize      = Math.round(altezza * 0.44) + 'px';
     document.getElementById('banner-data-centro').style.fontSize = Math.round(altezza * 0.28) + 'px';
+
     if (modalitaAttuale !== 'adv') {
         el.style.backgroundColor = bannerColore;
         el.style.color = bannerTestoColore;

@@ -68,7 +68,7 @@ try {
 }
 
 if (!$regola_base) {
-    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db), 'profilo' => $profilo['nome'],
+    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
                  'sidebar_slides' => getSidebarSlides($db, $profilo['id'], $token)];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
@@ -103,7 +103,7 @@ $contenuti_evento = $evento_attivo ? getContenutiPlaylist($db, $evento_attivo['p
 $contenuti_tutti  = array_values(array_merge($contenuti_base, $contenuti_evento));
 
 if (empty($contenuti_tutti)) {
-    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db), 'profilo' => $profilo['nome'],
+    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
                  'sidebar_slides' => getSidebarSlides($db, $profilo['id'], $token)];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
@@ -202,9 +202,26 @@ function getContenutiPlaylist($db, $playlist_id, $oggi) {
         ORDER BY pi.ordine
     ")->fetchAll(PDO::FETCH_ASSOC);
 
-    return array_values(array_filter($rows, function($c) use ($oggi) {
+    return array_values(array_filter($rows, function($c) use ($oggi, $db) {
+        // Scadenza playlist item
         if (!empty($c['data_fine'])   && $c['data_fine']   < $oggi) return false;
         if (!empty($c['data_inizio']) && $c['data_inizio'] > $oggi) return false;
+
+        // Se il contenuto ha un inserzionista, verifica che sia attivo e con contratto valido
+        if (!empty($c['inserzionista_id'])) {
+            $ins = $db->query("SELECT attivo FROM inserzionisti WHERE id=" . intval($c['inserzionista_id']))->fetch();
+            if (!$ins || !$ins['attivo']) return false;
+
+            $contratto_ok = $db->query("
+                SELECT COUNT(*) FROM contratti
+                WHERE inserzionista_id = " . intval($c['inserzionista_id']) . "
+                AND stato = 'attivo'
+                AND data_inizio <= '$oggi'
+                AND data_fine   >= '$oggi'
+            ")->fetchColumn();
+            if (!$contratto_ok) return false;
+        }
+
         return true;
     }));
 }
