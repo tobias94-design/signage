@@ -231,14 +231,35 @@ var PRESETS = {
 };
 
 function avviaSidebar(slides) {
+    // Pulisci timer e interval esistenti
+    if (sidebarTimer) {
+        clearTimeout(sidebarTimer);
+        sidebarTimer = null;
+    }
+    Object.keys(countdownIntervals).forEach(id => {
+        clearInterval(countdownIntervals[id]);
+        delete countdownIntervals[id];
+    });
+    
     if (!slides || !slides.length) {
-        sidebarSlides = [{ tipo:'corsi', titolo:'In programma oggi', durata:30, colore_sfondo:'#111111', colore_testo:'#ffffff', sfondo:'', sfondo_preset:'', contenuto:'{}' }];
+        console.log('Nessuna slide attiva, mostro slide default corsi');
+        sidebarSlides = [{ 
+            id: 'default-corsi',
+            tipo: 'corsi', 
+            titolo: 'In programma oggi', 
+            durata: 30, 
+            colore_sfondo: '#111111', 
+            colore_testo: '#ffffff', 
+            sfondo: '', 
+            sfondo_preset: '', 
+            contenuto: '{}',
+            attivo: 1
+        }];
     } else {
         sidebarSlides = slides;
     }
+    
     sidebarIndice = 0;
-    if (sidebarTimer) clearTimeout(sidebarTimer);
-    sidebarTimer = null;
     mostraSlide(0);
 }
 
@@ -790,8 +811,28 @@ async function aggiornaDaAPI() {
             const nuove = JSON.stringify(stato.sidebar_slides);
             if (nuove !== slidesSerializ) {
                 slidesSerializ = nuove;
+                console.log('Slide aggiornate dal server, riavvio carousel');
+                
+                // Ferma timer e interval countdown prima di ricaricare
+                if (sidebarTimer) clearTimeout(sidebarTimer);
+                Object.keys(countdownIntervals).forEach(id => {
+                    clearInterval(countdownIntervals[id]);
+                    delete countdownIntervals[id];
+                });
+                
+                // Riavvia sidebar con nuove slide
                 avviaSidebar(stato.sidebar_slides);
             }
+        } else if (slidesSerializ !== '[]') {
+            // Se il server non restituisce slide ma ne avevamo prima, svuota
+            console.log('Nessuna slide dal server, svuoto carousel');
+            slidesSerializ = '[]';
+            if (sidebarTimer) clearTimeout(sidebarTimer);
+            Object.keys(countdownIntervals).forEach(id => {
+                clearInterval(countdownIntervals[id]);
+                delete countdownIntervals[id];
+            });
+            avviaSidebar([]);
         }
 
         const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
