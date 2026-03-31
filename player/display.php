@@ -9,20 +9,30 @@ if (!$token) {
     $token = $primo['token'] ?? '';
 }
 
-$stmt = $db->prepare('SELECT d.*, p.nome as profilo_nome FROM dispositivi d LEFT JOIN profili p ON p.id = d.profilo_id WHERE d.token = ?');
+$stmt = $db->prepare('SELECT d.*, p.nome as profilo_nome, p.banner_colore, p.banner_testo_colore, p.banner_posizione, p.banner_altezza, p.logo FROM dispositivi d LEFT JOIN profili p ON p.id = d.profilo_id WHERE d.token = ?');
 $stmt->execute([$token]);
 $dispositivo = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$dispositivo) die('<body style="background:#000;color:#e94560;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">Dispositivo non trovato</body>');
 
-$club      = $dispositivo['club'] ?? '';
-$sheet_url = $dispositivo['sheet_url'] ?? '';
+$club       = $dispositivo['club'] ?? '';
+$sheet_url  = $dispositivo['sheet_url'] ?? '';
+$stream_url = $dispositivo['stream_url'] ?? '';
+
+// Dimensioni layout dal profilo — calcolate lato PHP per CSS corretto subito
+$BANNER_H   = (int)($dispositivo['banner_altezza'] ?? 80);
+$BANNER_POS = $dispositivo['banner_posizione'] ?? 'bottom';
+$MAIN_H     = 1080 - $BANNER_H;
+$MAIN_TOP   = $BANNER_POS === 'top' ? $BANNER_H : 0;
+// Sidebar larghezza per mantenere 16:9 sulla TV
+$SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
 ?>
 <!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
     <title>PixelBridge</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
@@ -44,8 +54,8 @@ $sheet_url = $dispositivo['sheet_url'] ?? '';
 
         #main {
             position: absolute;
-            top: 0; left: 0;
-            width: 1920px; height: 1080px;
+            top: <?= $MAIN_TOP ?>px; left: 0;
+            width: 1920px; height: <?= $MAIN_H ?>px;
             display: flex; flex-direction: row;
         }
 
@@ -64,22 +74,23 @@ $sheet_url = $dispositivo['sheet_url'] ?? '';
         }
 
         #layer-adv {
-            position: absolute; top: 0; left: 0;
-            width: 1920px; height: 1080px;
+            position: absolute;
+            <?= $BANNER_POS === 'top' ? 'top:' . $BANNER_H . 'px' : 'top:0' ?>;
+            left: 0; width: 1920px; height: <?= $MAIN_H ?>px;
             background: #000; display: none; z-index: 20;
         }
         #adv-video {
             position: absolute; top: 0; left: 0;
-            width: 1920px; height: 1080px; object-fit: contain;
+            width: 1920px; height: <?= $MAIN_H ?>px; object-fit: contain;
         }
         #adv-immagine {
             position: absolute; top: 0; left: 0;
-            width: 1920px; height: 1080px;
+            width: 1920px; height: <?= $MAIN_H ?>px;
             object-fit: contain; display: none;
         }
 
         #colonna-corsi {
-            width: 380px; background: #111;
+            width: <?= $SIDEBAR_W ?>px; background: #111;
             display: flex; flex-direction: column;
             overflow: hidden; border-left: 2px solid #222;
             position: relative;
@@ -138,8 +149,9 @@ $sheet_url = $dispositivo['sheet_url'] ?? '';
 
         #layer-banner {
             position: absolute;
-            left: 0; right: 0; bottom: 0;
-            height: 80px; background: #000;
+            left: 0; right: 0;
+            <?= $BANNER_POS === 'top' ? 'top: 0;' : 'bottom: 0;' ?>
+            height: <?= $BANNER_H ?>px; background: #000;
             display: flex; align-items: center;
             z-index: 30; overflow: hidden;
             transition: background-color 0.3s;
@@ -426,7 +438,41 @@ function aggiornaOrologio() {
 }
 
 // ── SEGNALE TV ───────────────────────────────────────────────────
+// ── SEGNALE TV / STREAM ──────────────────────────────────────────
+const STREAM_URL = '<?php echo htmlspecialchars($stream_url); ?>';
+
 async function avviaSegnaleTV() {
+    const v = document.getElementById('tv-video');
+
+    if (STREAM_URL) {
+        // Modalità streaming HLS
+        document.getElementById('tv-placeholder').style.display = 'none';
+        if (STREAM_URL.includes('.m3u8')) {
+            // Stream HLS
+            if (Hls.isSupported()) {
+                const hls = new Hls({ autoStartLoad: true, startLevel: -1 });
+                hls.loadSource(STREAM_URL);
+                hls.attachMedia(v);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => v.play().catch(() => {}));
+                hls.on(Hls.Events.ERROR, (e, data) => {
+                    if (data.fatal) {
+                        setTimeout(() => { hls.loadSource(STREAM_URL); }, 5000);
+                    }
+                });
+            } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+                // Safari nativo
+                v.src = STREAM_URL;
+                v.play().catch(() => {});
+            }
+        } else {
+            // URL diretto (mp4, webm, YouTube embed non supportato in video tag)
+            v.src = STREAM_URL;
+            v.play().catch(() => {});
+        }
+        return;
+    }
+
+    // Modalità webcam / segnale TV via cavo
     try {
         await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -435,7 +481,6 @@ async function avviaSegnaleTV() {
         const stream = await navigator.mediaDevices.getUserMedia({
             video: { deviceId: { exact: capture.deviceId } }, audio: true
         });
-        const v = document.getElementById('tv-video');
         v.srcObject = stream; v.play();
         document.getElementById('tv-placeholder').style.display = 'none';
     } catch(e) {}

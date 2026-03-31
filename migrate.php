@@ -25,6 +25,8 @@ $migrazioni = [
     "ALTER TABLE sidebar_slides ADD COLUMN dispositivo_token TEXT DEFAULT ''",
     // contenuti — inserzionista
     "ALTER TABLE contenuti ADD COLUMN inserzionista_id INTEGER DEFAULT NULL",
+    // dispositivi — stream HLS
+    "ALTER TABLE dispositivi ADD COLUMN stream_url TEXT DEFAULT ''",
 ];
 
 $tabelle = [

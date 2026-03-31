@@ -50,7 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $nome      = trim($_POST['nome'] ?? '');
         $club      = trim($_POST['club'] ?? '');
         $layout    = $_POST['layout'] ?? 'standard';
-        $sheet_url = trim($_POST['sheet_url'] ?? '');
+        $sheet_url  = trim($_POST['sheet_url'] ?? '');
+        $stream_url = trim($_POST['stream_url'] ?? '');
         $numero_tv = (int)($_POST['numero_tv'] ?? 0) ?: null;
         $indirizzo = trim($_POST['indirizzo'] ?? '');
         $note      = trim($_POST['note'] ?? '');
@@ -61,8 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tok  = trim($slug, '-');
         $tok  = substr($tok, 0, 20) . '-' . bin2hex(random_bytes(3));
         if ($nome) {
-            $db->prepare("INSERT INTO dispositivi (nome, club, layout, sheet_url, token, numero_tv, indirizzo, note, lat, lon, tipo_display) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-               ->execute([$nome, $club, $layout, $sheet_url, $tok, $numero_tv, $indirizzo, $note, $lat, $lon, $tipo_display]);
+            $db->prepare("INSERT INTO dispositivi (nome, club, layout, sheet_url, stream_url, token, numero_tv, indirizzo, note, lat, lon, tipo_display) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+               ->execute([$nome, $club, $layout, $sheet_url, $stream_url, $tok, $numero_tv, $indirizzo, $note, $lat, $lon, $tipo_display]);
         }
         header('Location: dispositivi.php'); exit;
     }
@@ -73,15 +74,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $club      = trim($_POST['club'] ?? '');
         $profilo_id= $_POST['profilo_id'] ?? null;
         $layout    = $_POST['layout'] ?? 'standard';
-        $sheet_url = trim($_POST['sheet_url'] ?? '');
+        $sheet_url  = trim($_POST['sheet_url'] ?? '');
+        $stream_url = trim($_POST['stream_url'] ?? '');
         $numero_tv = (int)($_POST['numero_tv'] ?? 0) ?: null;
         $indirizzo = trim($_POST['indirizzo'] ?? '');
         $note      = trim($_POST['note'] ?? '');
         $lat          = $_POST['lat'] !== '' ? (float)$_POST['lat'] : null;
         $lon          = $_POST['lon'] !== '' ? (float)$_POST['lon'] : null;
         $tipo_display = in_array($_POST['tipo_display']??'tv', ['tv','led','totem']) ? $_POST['tipo_display'] : 'tv';
-        $db->prepare("UPDATE dispositivi SET nome=?,club=?,profilo_id=?,layout=?,sheet_url=?,numero_tv=?,indirizzo=?,note=?,lat=?,lon=?,tipo_display=? WHERE token=?")
-           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $numero_tv, $indirizzo, $note, $lat, $lon, $tipo_display, $tok]);
+        $db->prepare("UPDATE dispositivi SET nome=?,club=?,profilo_id=?,layout=?,sheet_url=?,stream_url=?,numero_tv=?,indirizzo=?,note=?,lat=?,lon=?,tipo_display=? WHERE token=?")
+           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $stream_url, $numero_tv, $indirizzo, $note, $lat, $lon, $tipo_display, $tok]);
         header('Location: dispositivi.php'); exit;
     }
 
@@ -331,6 +333,12 @@ require_once __DIR__ . '/includes/header.php';
             <label>URL Google Sheet Corsi</label>
             <input type="text" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/..." value="<?= htmlspecialchars($dev['sheet_url'] ?? '') ?>">
             <div style="font-size:11px;color:var(--sg-muted);margin-top:-8px;margin-bottom:14px;">File → Pubblica sul web → CSV → copia link</div>
+
+            <label>URL Stream TV <span style="font-size:10px;color:var(--sg-muted);">(HLS .m3u8 o YouTube)</span></label>
+            <input type="text" name="stream_url" placeholder="https://esempio.com/stream.m3u8" value="<?= htmlspecialchars($dev['stream_url'] ?? '') ?>">
+            <div style="font-size:11px;color:var(--sg-muted);margin-top:-8px;margin-bottom:14px;">
+                Lascia vuoto per usare il segnale TV via cavo. Esempi: RAI Sport, SportItalia, YouTube Live...
+            </div>
 
             <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:16px;margin-top:4px;">
                 <label style="display:flex;align-items:center;gap:8px;">
