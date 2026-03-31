@@ -269,12 +269,96 @@ def run_player(token):
         else:
             time.sleep(30)
 
+# ── SETUP KIOSK (primo avvio) ─────────────────────────────────
+def setup_kiosk_se_necessario():
+    """Esegue il setup kiosk una sola volta al primo avvio."""
+    cfg = load_config()
+    if cfg.get('kiosk_setup_done'):
+        return
+
+    log("Primo avvio — eseguo setup kiosk...")
+
+    # Script PowerShell inline (stesse operazioni di setup_kiosk.ps1)
+    ps_script = r"""
+# Aggiornamenti automatici
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoUpdate /t REG_DWORD /d 1 /f | Out-Null
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v AUOptions /t REG_DWORD /d 1 /f | Out-Null
+
+# Notifiche
+reg add "HKCU\SOFTWARE\Policies\Microsoft\Windows\Explorer" /v DisableNotificationCenter /t REG_DWORD /d 1 /f | Out-Null
+reg add "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\PushNotifications" /v ToastEnabled /t REG_DWORD /d 0 /f | Out-Null
+
+# Schermata di blocco
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization" /v NoLockScreen /t REG_DWORD /d 1 /f | Out-Null
+
+# Sleep e screensaver
+powercfg /change monitor-timeout-ac 0
+powercfg /change monitor-timeout-dc 0
+powercfg /change standby-timeout-ac 0
+powercfg /change standby-timeout-dc 0
+powercfg /change hibernate-timeout-ac 0
+reg add "HKCU\Control Panel\Desktop" /v ScreenSaveActive /t REG_SZ /d 0 /f | Out-Null
+
+# Cursore invisibile
+$cp = "HKCU\Control Panel\Cursors"
+foreach ($cur in @("","Arrow","Hand","Wait","IBeam","SizeAll","SizeNESW","SizeNS","SizeNWSE","SizeWE","UpArrow","Crosshair","No","AppStarting")) {
+    reg add $cp /v $cur /t REG_SZ /d "" /f | Out-Null
+}
+$code = @"
+[DllImport("user32.dll")] public static extern bool SystemParametersInfo(int a, int b, string c, int d);
+"@
+Add-Type -MemberDefinition $code -Name CF -Namespace Win32
+[Win32.CF]::SystemParametersInfo(0x0057, 0, $null, 3) | Out-Null
+
+# Taskbar auto-hide
+$ts = "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3"
+$v = (Get-ItemProperty -Path "Registry::$ts" -Name Settings -ErrorAction SilentlyContinue).Settings
+if ($v) { $v[8] = 3; Set-ItemProperty -Path "Registry::$ts" -Name Settings -Value $v }
+
+# Errori e crash
+reg add "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting" /v Disabled /t REG_DWORD /d 1 /f | Out-Null
+reg add "HKCU\SOFTWARE\Microsoft\Windows\Windows Error Reporting" /v DontShowUI /t REG_DWORD /d 1 /f | Out-Null
+
+# Defender notifiche
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender Security Center\Notifications" /v DisableNotifications /t REG_DWORD /d 1 /f | Out-Null
+
+# OneDrive
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\OneDrive" /v DisableFileSyncNGSC /t REG_DWORD /d 1 /f | Out-Null
+
+# UAC
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v ConsentPromptBehaviorAdmin /t REG_DWORD /d 0 /f | Out-Null
+
+Write-Host "Setup kiosk completato"
+"""
+
+    try:
+        import tempfile
+        ps_file = os.path.join(tempfile.gettempdir(), 'pb_kiosk_setup.ps1')
+        with open(ps_file, 'w', encoding='utf-8') as f:
+            f.write(ps_script)
+
+        result = subprocess.run(
+            ['powershell', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
+             '-File', ps_file],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            log("Setup kiosk completato con successo")
+            cfg['kiosk_setup_done'] = True
+            save_config(cfg)
+        else:
+            log(f"Setup kiosk: {result.stderr[:200]}")
+    except Exception as e:
+        log(f"Setup kiosk errore: {e}")
+
+
 # ── MAIN ──────────────────────────────────────────────────────
 def main():
     log(f"=== PixelBridge Agent v{VERSION} ===")
     log(f"Server: {SERVER_URL} | Macchina: {get_machine_name()}")
 
     installa_autostart()
+    setup_kiosk_se_necessario()  # solo al primo avvio
     controlla_aggiornamento()  # controlla subito all'avvio
 
     cfg   = load_config()
