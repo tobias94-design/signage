@@ -334,10 +334,21 @@ require_once __DIR__ . '/includes/header.php';
             <input type="text" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/..." value="<?= htmlspecialchars($dev['sheet_url'] ?? '') ?>">
             <div style="font-size:11px;color:var(--sg-muted);margin-top:-8px;margin-bottom:14px;">File → Pubblica sul web → CSV → copia link</div>
 
-            <label>URL Stream TV <span style="font-size:10px;color:var(--sg-muted);">(HLS .m3u8 o YouTube)</span></label>
-            <input type="text" name="stream_url" placeholder="https://esempio.com/stream.m3u8" value="<?= htmlspecialchars($dev['stream_url'] ?? '') ?>">
+            <label>URL Stream TV <span style="font-size:10px;color:var(--sg-muted);">(HLS .m3u8)</span></label>
+            <div style="display:flex;gap:8px;margin-bottom:6px;">
+                <select id="stream_preset" onchange="applicaPresetStream(this.value)" style="flex:1;">
+                    <option value="">— Scegli canale preset —</option>
+                    <option value="https://d15umi5iaezxgx.cloudfront.net/LA7/CLN/HLS-B/Live_1280x720_.m3u8">📺 La7</option>
+                    <option value="https://mediapolis.rai.it/relinker/relinkerServlet.htm?cont=2606803&output=16">📺 RAI 1</option>
+                    <option value="https://mediapolis.rai.it/relinker/relinkerServlet.htm?cont=308718&output=16">📺 RAI 2</option>
+                    <option value="https://mediapolis.rai.it/relinker/relinkerServlet.htm?cont=308709&output=16">📺 RAI 3</option>
+                    <option value="https://streaminggio3.rai.it/hls/Sport1HD.m3u8">📺 RAI Sport</option>
+                    <option value="custom">✏️ Inserisci manualmente...</option>
+                </select>
+            </div>
+            <input type="text" name="stream_url" id="stream_url" placeholder="https://esempio.com/stream.m3u8" value="<?= htmlspecialchars($dev['stream_url'] ?? '') ?>">
             <div style="font-size:11px;color:var(--sg-muted);margin-top:-8px;margin-bottom:14px;">
-                Lascia vuoto per usare il segnale TV via cavo. Esempi: RAI Sport, SportItalia, YouTube Live...
+                Lascia vuoto per usare il segnale TV via cavo. I canali RAI potrebbero essere instabili, La7 è il più affidabile.
             </div>
 
             <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:16px;margin-top:4px;">
@@ -442,6 +453,28 @@ document.querySelectorAll('.tipo-card').forEach(function(card) {
         this.style.background  = c + '18';
     });
 });
+
+function applicaPresetStream(val) {
+    const input = document.getElementById('stream_url');
+    if (!val || val === 'custom') {
+        input.focus();
+        return;
+    }
+    input.value = val;
+}
+
+// Al caricamento, evidenzia il preset se corrisponde all'URL salvato
+(function() {
+    const input  = document.getElementById('stream_url');
+    const select = document.getElementById('stream_preset');
+    if (!input || !select || !input.value) return;
+    for (let i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === input.value) {
+            select.selectedIndex = i;
+            break;
+        }
+    }
+})();
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
