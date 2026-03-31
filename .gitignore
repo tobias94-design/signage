@@ -7,3 +7,4 @@ database.sqlite
 .DS_Store
 cache/
 deploy.sh
+assets/img/logo_global.png
