@@ -338,17 +338,28 @@ require_once __DIR__ . '/includes/header.php';
             <div style="display:flex;gap:8px;margin-bottom:6px;">
                 <select id="stream_preset" onchange="applicaPresetStream(this.value)" style="flex:1;">
                     <option value="">— Scegli canale preset —</option>
-                    <option value="https://d15umi5iaezxgx.cloudfront.net/LA7/CLN/HLS-B/Live_1280x720_.m3u8">📺 La7</option>
-                    <option value="https://mediapolis.rai.it/relinker/relinkerServlet.htm?cont=2606803&output=16">📺 RAI 1</option>
-                    <option value="https://mediapolis.rai.it/relinker/relinkerServlet.htm?cont=308718&output=16">📺 RAI 2</option>
-                    <option value="https://mediapolis.rai.it/relinker/relinkerServlet.htm?cont=308709&output=16">📺 RAI 3</option>
-                    <option value="https://streaminggio3.rai.it/hls/Sport1HD.m3u8">📺 RAI Sport</option>
+                    <optgroup label="⚽ Sport">
+                        <option value="https://mediapolis.rai.it/relinker/relinkerServlet.htm?cont=358025&output=7&forceUserAgent=rainet/4.0.5">📺 RAI Sport HD</option>
+                        <option value="https://sportitaliaamd.akamaized.net/live/Sportitalia/hls/F59D8EB0332E783633CDDE8E265844975635D24F/index.m3u8">📺 Sportitalia</option>
+                        <option value="https://sportsitalia-samsungitaly.amagi.tv/playlist.m3u8">📺 Sportitalia Plus</option>
+                        <option value="https://di-g7ij0rwh.vo.lswcdn.net/sportitalia/sisolocalcio.smil/playlist.m3u8">📺 Sportitalia Solocalcio</option>
+                        <option value="https://stream.prod-01.milano.nxmedge.net/argocdn/bikechannel/video.m3u8">📺 Bike Channel</option>
+                    </optgroup>
+                    <optgroup label="📺 Generalisti">
+                        <option value="https://viamotionhsi.netplus.ch/live/eds/la7/browser-HLS8/la7.m3u8">📺 La7</option>
+                        <option value="https://mediapolis.rai.it/relinker/relinkerServlet.htm?cont=2606803&output=16">📺 RAI 1</option>
+                        <option value="https://mediapolis.rai.it/relinker/relinkerServlet.htm?cont=308718&output=16">📺 RAI 2</option>
+                        <option value="https://mediapolis.rai.it/relinker/relinkerServlet.htm?cont=308709&output=16">📺 RAI 3</option>
+                        <option value="https://mediapolis.rai.it/relinker/relinkerServlet.htm?cont=1&output=16">📺 RAI News 24</option>
+                        <option value="https://hls-live-tv2000.akamaized.net/hls/live/2028510/tv2000/master.m3u8">📺 TV2000</option>
+                        <option value="https://d31mw7o1gs0dap.cloudfront.net/v1/master/3722c60a815c199d9c0ef36c5b73da68a62b09d1/cc-y5pbi2sq9r609/NOVE_IT.m3u8">📺 Nove</option>
+                    </optgroup>
                     <option value="custom">✏️ Inserisci manualmente...</option>
                 </select>
             </div>
             <input type="text" name="stream_url" id="stream_url" placeholder="https://esempio.com/stream.m3u8" value="<?= htmlspecialchars($dev['stream_url'] ?? '') ?>">
             <div style="font-size:11px;color:var(--sg-muted);margin-top:-8px;margin-bottom:14px;">
-                Lascia vuoto per usare il segnale TV via cavo. I canali RAI potrebbero essere instabili, La7 è il più affidabile.
+                Lascia vuoto per segnale TV via cavo. Eurosport richiede abbonamento, non disponibile. RAI Sport e Sportitalia sono gratuiti.
             </div>
 
             <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:16px;margin-top:4px;">
