@@ -802,37 +802,48 @@ let slidesSerializ = '';
 async function aggiornaDaAPI() {
     try {
         const res   = await fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&t=' + Date.now());
-        if (!res.ok) throw new Error();
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const stato = await res.json();
-        if (stato.errore) { setTimeout(aggiornaDaAPI, 15000); return; }
+        
+        console.log('📡 Polling API - stato ricevuto:', stato);
+        
+        if (stato.errore) { 
+            console.error('❌ Errore API:', stato.errore);
+            setTimeout(aggiornaDaAPI, 15000); 
+            return; 
+        }
+        
         if (stato.banner) applicaBanner(stato.banner);
 
-        if (stato.sidebar_slides) {
-            const nuove = JSON.stringify(stato.sidebar_slides);
-            if (nuove !== slidesSerializ) {
-                slidesSerializ = nuove;
-                console.log('Slide aggiornate dal server, riavvio carousel');
-                
-                // Ferma timer e interval countdown prima di ricaricare
-                if (sidebarTimer) clearTimeout(sidebarTimer);
-                Object.keys(countdownIntervals).forEach(id => {
-                    clearInterval(countdownIntervals[id]);
-                    delete countdownIntervals[id];
-                });
-                
-                // Riavvia sidebar con nuove slide
-                avviaSidebar(stato.sidebar_slides);
+        // FORZA SEMPRE IL CONTROLLO SLIDE
+        const slideRicevute = stato.sidebar_slides || [];
+        const nuove = JSON.stringify(slideRicevute);
+        
+        console.log('🔍 Slide ricevute:', slideRicevute.length, 'slide');
+        console.log('🔍 Slide attuali in memoria:', sidebarSlides.length, 'slide');
+        console.log('🔍 Hash vecchio:', slidesSerializ.substring(0, 50) + '...');
+        console.log('🔍 Hash nuovo:', nuove.substring(0, 50) + '...');
+        
+        if (nuove !== slidesSerializ) {
+            console.log('🔄 CAMBIAMENTO RILEVATO - Aggiorno sidebar');
+            slidesSerializ = nuove;
+            
+            // Ferma timer e interval countdown
+            if (sidebarTimer) {
+                clearTimeout(sidebarTimer);
+                console.log('⏹ Timer sidebar fermato');
             }
-        } else if (slidesSerializ !== '[]') {
-            // Se il server non restituisce slide ma ne avevamo prima, svuota
-            console.log('Nessuna slide dal server, svuoto carousel');
-            slidesSerializ = '[]';
-            if (sidebarTimer) clearTimeout(sidebarTimer);
             Object.keys(countdownIntervals).forEach(id => {
                 clearInterval(countdownIntervals[id]);
                 delete countdownIntervals[id];
+                console.log('⏹ Countdown interval ' + id + ' fermato');
             });
-            avviaSidebar([]);
+            
+            // Riavvia sidebar con nuove slide
+            console.log('▶️ Riavvio carousel con', slideRicevute.length, 'slide');
+            avviaSidebar(slideRicevute);
+        } else {
+            console.log('✅ Nessun cambiamento nelle slide');
         }
 
         const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
@@ -845,7 +856,7 @@ async function aggiornaDaAPI() {
         }
         statoCorrente = stato;
     } catch(e) { 
-        console.error('Errore polling API:', e);
+        console.error('❌ Errore polling API:', e);
         setTimeout(aggiornaDaAPI, 15000); 
     }
 }
