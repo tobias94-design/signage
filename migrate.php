@@ -11,6 +11,10 @@ $migrazioni = [
     "ALTER TABLE profili ADD COLUMN banner_testo TEXT DEFAULT ''",
     "ALTER TABLE profili ADD COLUMN logo TEXT DEFAULT ''",
     "ALTER TABLE profili ADD COLUMN playlist_base_id INTEGER DEFAULT NULL",
+    // ── NUOVI CAMPI CONTROLLO GRANULARE ──
+    "ALTER TABLE profili ADD COLUMN logo_size INTEGER DEFAULT 75",
+    "ALTER TABLE profili ADD COLUMN data_size INTEGER DEFAULT 28",
+    "ALTER TABLE profili ADD COLUMN ora_size INTEGER DEFAULT 44",
     // dispositivi
     "ALTER TABLE dispositivi ADD COLUMN sheet_url TEXT DEFAULT ''",
     "ALTER TABLE dispositivi ADD COLUMN club TEXT DEFAULT ''",

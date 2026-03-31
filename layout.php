@@ -11,6 +11,11 @@ try { $db->exec("ALTER TABLE profili ADD COLUMN layout_tipo TEXT DEFAULT 'solo_b
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN layout_tipo TEXT DEFAULT 'solo_banner'"); } catch(Exception $e) {}
 try { $db->exec("ALTER TABLE sidebar_slides ADD COLUMN sfondo_preset TEXT DEFAULT ''"); } catch(Exception $e) {}
 try { $db->exec("ALTER TABLE sidebar_slides ADD COLUMN dispositivo_token TEXT DEFAULT ''"); } catch(Exception $e) {}
+// ── NUOVI CAMPI CONTROLLO GRANULARE ──
+try { $db->exec("ALTER TABLE profili ADD COLUMN logo_size INTEGER DEFAULT 75"); } catch(Exception $e) {}
+try { $db->exec("ALTER TABLE profili ADD COLUMN data_size INTEGER DEFAULT 28"); } catch(Exception $e) {}
+try { $db->exec("ALTER TABLE profili ADD COLUMN ora_size INTEGER DEFAULT 44"); } catch(Exception $e) {}
+
 // Fix: rendi profilo_id nullable se non lo è già
 try { $db->exec("CREATE TABLE IF NOT EXISTS sidebar_slides_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,8 +64,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['salva_banner'])) {
     }
     if (isset($_POST['rimuovi_logo'])) $logo = '';
     if ($pid)
-        $db->prepare('UPDATE profili SET banner_colore=?,banner_testo_colore=?,banner_posizione=?,banner_altezza=?,logo=? WHERE id=?')
-           ->execute([$_POST['banner_colore']??'#000',$_POST['banner_testo_colore']??'#fff',$_POST['banner_posizione']??'bottom',(int)($_POST['banner_altezza']??80),$logo,$pid]);
+        $db->prepare('UPDATE profili SET banner_colore=?,banner_testo_colore=?,banner_posizione=?,banner_altezza=?,logo=?,logo_size=?,data_size=?,ora_size=? WHERE id=?')
+           ->execute([
+               $_POST['banner_colore']??'#000',
+               $_POST['banner_testo_colore']??'#fff',
+               $_POST['banner_posizione']??'bottom',
+               (int)($_POST['banner_altezza']??80),
+               $logo,
+               (int)($_POST['logo_size']??75),
+               (int)($_POST['data_size']??28),
+               (int)($_POST['ora_size']??44),
+               $pid
+           ]);
     $msg = 'ok|Banner salvato!';
 }
 
@@ -69,8 +84,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['azione'])) {
     $dev_token = $_POST['dev_token'] ?? '';
 
     if ($_POST['azione'] === 'aggiungi_slide') {
-        // DEBUG TEMPORANEO
-        error_log("POST aggiungi_slide: sfondo_preset=" . ($_POST['sfondo_preset'] ?? 'NON PRESENTE') . " colore_sfondo=" . ($_POST['colore_sfondo'] ?? ''));
         $tipo      = $_POST['tipo'] ?? 'info';
         $titolo    = trim($_POST['titolo'] ?? '');
         $durata    = max(3, (int)($_POST['durata'] ?? 10));
@@ -78,12 +91,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['azione'])) {
         $sfondo    = uploadSfondo($_FILES['sfondo'] ?? null);
         $contenuto = [];
         switch ($tipo) {
-            case 'countdown': $contenuto = ['data_target'=>$_POST['ct_data_target']??'','messaggio_post'=>$_POST['ct_messaggio_post']??'']; break;
-            case 'meteo':     $contenuto = ['citta'=>trim($_POST['mt_citta']??''),'lat'=>trim($_POST['mt_lat']??''),'lon'=>trim($_POST['mt_lon']??'')]; break;
-            case 'info':      $contenuto = ['testo'=>trim($_POST['info_testo']??''),'icona'=>trim($_POST['info_icona']??'ℹ️')]; break;
+            case 'countdown': 
+                $contenuto = [
+                    'data_target' => $_POST['ct_data_target'] ?? '',
+                    'messaggio_pre' => $_POST['ct_messaggio_pre'] ?? '',
+                    'auto_disable' => isset($_POST['ct_auto_disable']) ? 1 : 0
+                ]; 
+                break;
+            case 'meteo':     
+                $contenuto = [
+                    'citta' => trim($_POST['mt_citta'] ?? ''),
+                    'lat' => trim($_POST['mt_lat'] ?? ''),
+                    'lon' => trim($_POST['mt_lon'] ?? '')
+                ]; 
+                break;
+            case 'info':      
+                $contenuto = [
+                    'testo' => trim($_POST['info_testo'] ?? ''),
+                    'icona' => trim($_POST['info_icona'] ?? 'ℹ️')
+                ]; 
+                break;
         }
         $ordine = (int)$db->query("SELECT COUNT(*) FROM sidebar_slides WHERE dispositivo_token=".$db->quote($dev_token))->fetchColumn();
-        // profilo_id è NULL — le slide sono legate al dispositivo_token, non al profilo
         $db->prepare('INSERT INTO sidebar_slides (dispositivo_token, profilo_id, tipo, titolo, contenuto, durata, ordine, sfondo, sfondo_preset, colore_sfondo, colore_testo, attivo) VALUES (?,NULL,?,?,?,?,?,?,?,?,?,1)')
            ->execute([$dev_token,$tipo,$titolo,json_encode($contenuto),$durata,$ordine,$sfondo,$preset,$_POST['colore_sfondo']??'#111',$_POST['colore_testo']??'#fff']);
         $msg = 'ok|Slide aggiunta!';
@@ -113,6 +142,9 @@ $dispositivi = $db->query("
     SELECT d.token, d.nome, d.club, d.layout_tipo, COALESCE(d.tipo_display,'tv') as tipo_display,
            p.nome AS profilo_nome, p.id AS profilo_id,
            p.banner_colore, p.banner_testo_colore, p.banner_posizione, p.banner_altezza, p.logo,
+           COALESCE(p.logo_size, 75) as logo_size,
+           COALESCE(p.data_size, 28) as data_size,
+           COALESCE(p.ora_size, 44) as ora_size,
            CASE WHEN d.ultimo_ping > datetime('now','-2 minutes') THEN 'online' ELSE 'offline' END AS stato
     FROM dispositivi d
     LEFT JOIN profili p ON p.id = d.profilo_id
@@ -194,7 +226,6 @@ require_once 'includes/header.php';
         <?php endif; ?>
     </div>
     <?php elseif ($sel_dev): ?>
-        <!-- Template pills inline col selector -->
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span style="font-size:11px;color:var(--sg-muted);font-weight:600;white-space:nowrap;">Template:</span>
             <div class="layout-pill-group" data-token="<?= htmlspecialchars($sel_token) ?>">
@@ -284,17 +315,35 @@ require_once 'includes/header.php';
                 <input type="hidden" name="salva_banner" value="1">
                 <input type="hidden" name="profilo_id_banner" value="<?= $sel_dev['profilo_id'] ?>">
                 <input type="hidden" name="logo_attuale" id="logoAttuale" value="<?= htmlspecialchars($sel_dev['logo']??'') ?>">
+                
                 <label>Posizione Banner</label>
                 <select name="banner_posizione" id="inp_posizione">
                     <option value="bottom" <?= ($sel_dev['banner_posizione']??'bottom')==='bottom'?'selected':'' ?>>Basso</option>
                     <option value="top"    <?= ($sel_dev['banner_posizione']??'')==='top'?'selected':'' ?>>Alto</option>
                 </select>
-                <label>Altezza Banner (px)</label>
-                <input type="number" name="banner_altezza" id="inp_altezza" value="<?= (int)($sel_dev['banner_altezza']??80) ?>" min="40" max="200">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                
+                <label>Altezza Banner (px) <span id="val_altezza" style="color:var(--sg-orange);font-weight:700;"><?= (int)($sel_dev['banner_altezza']??80) ?></span></label>
+                <input type="range" name="banner_altezza" id="inp_altezza" value="<?= (int)($sel_dev['banner_altezza']??80) ?>" min="40" max="200" oninput="document.getElementById('val_altezza').textContent=this.value">
+                
+                <!-- ══ NUOVI CONTROLLI GRANULARI ══ -->
+                <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.06);">
+                    <div style="font-size:11px;color:var(--sg-muted);margin-bottom:12px;font-weight:600;">Dimensioni Elementi</div>
+                    
+                    <label>Dimensione Logo (%) <span id="val_logo" style="color:var(--sg-orange);font-weight:700;"><?= (int)($sel_dev['logo_size']??75) ?></span></label>
+                    <input type="range" name="logo_size" id="inp_logo_size" value="<?= (int)($sel_dev['logo_size']??75) ?>" min="40" max="100" oninput="document.getElementById('val_logo').textContent=this.value">
+                    
+                    <label>Dimensione Giorno/Data (%) <span id="val_data" style="color:var(--sg-orange);font-weight:700;"><?= (int)($sel_dev['data_size']??28) ?></span></label>
+                    <input type="range" name="data_size" id="inp_data_size" value="<?= (int)($sel_dev['data_size']??28) ?>" min="16" max="44" oninput="document.getElementById('val_data').textContent=this.value">
+                    
+                    <label>Dimensione Orario (%) <span id="val_ora" style="color:var(--sg-orange);font-weight:700;"><?= (int)($sel_dev['ora_size']??44) ?></span></label>
+                    <input type="range" name="ora_size" id="inp_ora_size" value="<?= (int)($sel_dev['ora_size']??44) ?>" min="24" max="64" oninput="document.getElementById('val_ora').textContent=this.value">
+                </div>
+                
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;">
                     <div><label>Colore Sfondo</label><input type="color" name="banner_colore" id="inp_colore" value="<?= htmlspecialchars($sel_dev['banner_colore']??'#000000') ?>" style="width:100%;height:44px;margin-bottom:12px;"></div>
                     <div><label>Colore Testo</label><input type="color" name="banner_testo_colore" id="inp_testo_colore" value="<?= htmlspecialchars($sel_dev['banner_testo_colore']??'#ffffff') ?>" style="width:100%;height:44px;margin-bottom:12px;"></div>
                 </div>
+                
                 <label>Logo <span style="font-size:10px;color:var(--sg-muted);">400×120px consigliato</span></label>
                 <input type="file" name="logo" id="logoInput" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="margin-bottom:10px;">
                 <?php if (!empty($sel_dev['logo'])): ?>
@@ -321,7 +370,9 @@ require_once 'includes/header.php';
                 </div>
                 <?php endif; ?>
                 <div id="previewBanner" style="position:absolute;left:0;right:0;display:flex;align-items:center;overflow:hidden;">
-                    <img id="previewLogoImg" src="<?= !empty($sel_dev['logo'])?'assets/img/'.htmlspecialchars($sel_dev['logo']):'' ?>" style="object-fit:contain;flex-shrink:0;display:<?= !empty($sel_dev['logo'])?'block':'none' ?>">
+                    <div id="previewLogoWrap" style="display:flex;align-items:center;justify-content:flex-start;flex-shrink:0;">
+                        <img id="previewLogoImg" src="<?= !empty($sel_dev['logo'])?'assets/img/'.htmlspecialchars($sel_dev['logo']):'' ?>" style="object-fit:contain;flex-shrink:0;display:<?= !empty($sel_dev['logo'])?'block':'none' ?>">
+                    </div>
                     <div style="width:1px;background:rgba(255,255,255,0.2);align-self:stretch;margin:5px 0;flex-shrink:0;"></div>
                     <div id="previewData" style="flex:1;text-align:center;font-weight:500;letter-spacing:1px;white-space:nowrap;overflow:hidden;">
                         <?php $gg=['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato']; $mm=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']; echo $gg[date('w')].' '.date('j').' '.$mm[date('n')-1].' '.date('Y'); ?>
@@ -359,8 +410,12 @@ require_once 'includes/header.php';
                 <div id="campi-countdown" style="display:none;">
                     <label>Data e ora evento</label>
                     <input type="datetime-local" name="ct_data_target">
-                    <label>Messaggio post-evento</label>
-                    <input type="text" name="ct_messaggio_post" placeholder="Evento in corso!">
+                    <label>Messaggio pre-evento <span style="font-size:10px;color:var(--sg-muted);">(opzionale)</span></label>
+                    <input type="text" name="ct_messaggio_pre" placeholder="Es. Preparati per...">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;">
+                        <input type="checkbox" name="ct_auto_disable" value="1" checked style="width:auto;margin:0;">
+                        <span style="font-size:13px;">Disattiva slide automaticamente al termine countdown</span>
+                    </label>
                 </div>
                 <div id="campi-meteo" style="display:none;">
                     <label>Città</label>
@@ -431,8 +486,11 @@ require_once 'includes/header.php';
                         <?php if ($sl['titolo']): ?><span style="font-size:13px;font-weight:600;color:var(--sg-white);"><?= htmlspecialchars($sl['titolo']) ?></span><?php endif; ?>
                     </div>
                     <div style="font-size:11px;color:var(--sg-muted);padding-left:26px;">
-                        <?php if ($sl['tipo']==='countdown'&&!empty($cfg['data_target'])): ?>📅 <?= date('d/m/Y H:i',strtotime($cfg['data_target']));
-                        elseif ($sl['tipo']==='meteo'&&!empty($cfg['citta'])): ?>📍 <?= htmlspecialchars($cfg['citta']);
+                        <?php if ($sl['tipo']==='countdown'&&!empty($cfg['data_target'])): ?>
+                            📅 <?= date('d/m/Y H:i',strtotime($cfg['data_target'])) ?>
+                            <?php if (!empty($cfg['messaggio_pre'])): ?> · Pre: <?= htmlspecialchars(mb_substr($cfg['messaggio_pre'],0,30)) ?><?php endif; ?>
+                            <?php if (!empty($cfg['auto_disable'])): ?> · <span style="color:var(--sg-orange);">⚡ Auto-off</span><?php endif; ?>
+                        <?php elseif ($sl['tipo']==='meteo'&&!empty($cfg['citta'])): ?>📍 <?= htmlspecialchars($cfg['citta']);
                         elseif ($sl['tipo']==='info'&&!empty($cfg['testo'])): ?><?= htmlspecialchars($cfg['icona']??'') ?> <?= htmlspecialchars(mb_substr($cfg['testo'],0,60));
                         elseif ($sl['tipo']==='corsi'): ?>Corsi dal Google Sheet<?php endif; ?>
                     </div>
@@ -628,22 +686,18 @@ input[type=datetime-local] {
 <script>
 var currentToken = <?= json_encode($sel_token) ?>;
 
-// ── Quando cambio layout via pill, aggiorno il tab sidebar senza ricaricare ──
 function setLayout(btn, tipo, token) {
-    // Aggiorna tutte le pill di quel token
     document.querySelectorAll('.layout-pill-group[data-token="'+token+'"]').forEach(function(group){
         group.querySelectorAll('.layout-pill, .layout-pill-sm').forEach(function(b){
             b.classList.remove('active');
         });
         btn.classList.add('active');
-        // Se ci sono più gruppi (riepilogo + header), sincronizza
         group.querySelectorAll('button').forEach(function(b){
             if (tipo === 'banner_sidebar' && b.textContent.includes('Sidebar')) b.classList.add('active');
             if (tipo === 'solo_banner' && !b.textContent.includes('Sidebar')) b.classList.add('active');
         });
     });
 
-    // Abilita/disabilita tab sidebar dinamicamente
     if (token === currentToken) {
         var tabSlides = document.getElementById('tab-slides-link');
         if (tabSlides) {
@@ -660,7 +714,6 @@ function setLayout(btn, tipo, token) {
         }
     }
 
-    // Salva via AJAX
     var badge = document.getElementById('saved-badge');
     var fd = new FormData();
     fd.append('salva_layout_tipo','1');
@@ -674,19 +727,24 @@ function setLayout(btn, tipo, token) {
     });
 }
 
-// ── Preview banner ──
+// ── Preview banner CON CONTROLLI GRANULARI ──
 var previewScreen = document.getElementById('previewScreen');
 function aggiornaPreview(){
     if(!previewScreen) return;
-    var colore   = document.getElementById('inp_colore')?.value;
-    var testoCol = document.getElementById('inp_testo_colore')?.value;
-    var altezza  = parseInt(document.getElementById('inp_altezza')?.value)||80;
-    var posizione= document.getElementById('inp_posizione')?.value;
+    var colore     = document.getElementById('inp_colore')?.value;
+    var testoCol   = document.getElementById('inp_testo_colore')?.value;
+    var altezza    = parseInt(document.getElementById('inp_altezza')?.value)||80;
+    var posizione  = document.getElementById('inp_posizione')?.value;
+    var logoSize   = parseInt(document.getElementById('inp_logo_size')?.value)||75;
+    var dataSize   = parseInt(document.getElementById('inp_data_size')?.value)||28;
+    var oraSize    = parseInt(document.getElementById('inp_ora_size')?.value)||44;
+    
     if(!colore) return;
     var scaleW = previewScreen.offsetWidth/1920;
     var altPx  = Math.round(altezza * scaleW);
     var banner = document.getElementById('previewBanner');
     if(!banner) return;
+    
     banner.style.backgroundColor = colore;
     banner.style.color           = testoCol;
     banner.style.height          = altPx+'px';
@@ -694,21 +752,34 @@ function aggiornaPreview(){
     banner.style.gap             = Math.round(altPx*0.25)+'px';
     banner.style.bottom          = posizione==='bottom'?'0':'auto';
     banner.style.top             = posizione==='top'?'0':'auto';
+    
+    // Applicare dimensioni granulari
     var ora  = document.getElementById('previewOra');
     var data = document.getElementById('previewData');
-    if(ora)  { ora.style.fontSize  = Math.round(altPx*0.44)+'px'; ora.style.color  = testoCol; }
-    if(data) { data.style.fontSize = Math.round(altPx*0.28)+'px'; data.style.color = testoCol; }
     var logo = document.getElementById('previewLogoImg');
-    if(logo && logo.src && !logo.src.endsWith('/') && logo.style.display!=='none')
-        { logo.style.height=Math.round(altPx*0.75)+'px'; logo.style.width='auto'; }
+    
+    if(ora)  { 
+        ora.style.fontSize  = Math.round(altPx * (oraSize / 100))+'px'; 
+        ora.style.color  = testoCol; 
+    }
+    if(data) { 
+        data.style.fontSize = Math.round(altPx * (dataSize / 100))+'px'; 
+        data.style.color = testoCol; 
+    }
+    if(logo && logo.src && !logo.src.endsWith('/') && logo.style.display!=='none') {
+        logo.style.height = Math.round(altPx * (logoSize / 100))+'px';
+        logo.style.width  = 'auto';
+    }
 }
+
 function tickOra(){
     var el=document.getElementById('previewOra'); if(!el) return;
     var n=new Date();
     el.textContent=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0');
 }
 setInterval(tickOra,1000); tickOra();
-['inp_colore','inp_testo_colore','inp_altezza','inp_posizione'].forEach(function(id){
+
+['inp_colore','inp_testo_colore','inp_altezza','inp_posizione','inp_logo_size','inp_data_size','inp_ora_size'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.addEventListener('input',aggiornaPreview);
 });
 window.addEventListener('resize',aggiornaPreview);

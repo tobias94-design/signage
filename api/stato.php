@@ -5,6 +5,41 @@ header('Access-Control-Allow-Origin: *');
 require_once __DIR__ . '/../includes/db.php';
 $db = getDB();
 
+// ═══════════════════════════════════════════════════════════════
+// ── AUTO-DISABLE SLIDE COUNTDOWN ──────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+if (isset($_GET['action']) && $_GET['action'] === 'disable_slide') {
+    $slideId = (int)($_GET['id'] ?? 0);
+    
+    if ($slideId > 0) {
+        try {
+            $stmt = $db->prepare('UPDATE sidebar_slides SET attivo=0 WHERE id=?');
+            $stmt->execute([$slideId]);
+            
+            // Log dell'operazione
+            error_log("Slide countdown {$slideId} disattivata automaticamente");
+            
+            echo json_encode([
+                'success' => true, 
+                'message' => 'Slide disattivata automaticamente',
+                'slide_id' => $slideId
+            ]);
+        } catch (Exception $e) {
+            echo json_encode([
+                'success' => false, 
+                'message' => 'Errore database: ' . $e->getMessage()
+            ]);
+        }
+    } else {
+        echo json_encode([
+            'success' => false, 
+            'message' => 'ID slide non valido'
+        ]);
+    }
+    exit;
+}
+// ═══════════════════════════════════════════════════════════════
+
 $token = $_GET['token'] ?? '';
 if (!$token) { echo json_encode(['errore' => 'Token mancante']); exit; }
 
@@ -235,6 +270,10 @@ function getBanner($db, $profilo = null) {
         'banner_posizione'    => $profilo['banner_posizione']    ?? 'bottom',
         'banner_altezza'      => $profilo['banner_altezza']      ?? 80,
         'logo'                => $profilo['logo']                ?? '',
+        // ── NUOVI CAMPI DIMENSIONI GRANULARI ──
+        'logo_size'           => $profilo['logo_size']           ?? 75,
+        'data_size'           => $profilo['data_size']           ?? 28,
+        'ora_size'            => $profilo['ora_size']            ?? 44,
     ];
 }
 
