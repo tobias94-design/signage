@@ -219,7 +219,16 @@ let sidebarSlides = [];
 let sidebarIndice = 0;
 let sidebarTimer  = null;
 let meteoCache    = {};
-let countdownIntervals = {}; // Traccia gli interval dei countdown attivi
+let countdownIntervals = {};
+
+console.log('%c🚀 PIXELBRIDGE PLAYER AVVIATO', 'background: #e94560; color: #fff; padding: 4px 8px; font-weight: bold;');
+console.log('📍 Token:', TOKEN);
+console.log('🏢 Club:', CLUB || 'Non specificato');
+console.log('📊 Sheet URL:', SHEET_URL ? 'Configurato ✅' : 'Non configurato ❌'); // Traccia gli interval dei countdown attivi
+console.log("%c🚀 PIXELBRIDGE PLAYER AVVIATO", "background: #e94560; color: #fff; padding: 4px 8px; font-weight: bold;");
+console.log("📍 Token:", TOKEN);
+console.log("🏢 Club:", CLUB || "Non specificato");
+console.log("📊 Sheet URL:", SHEET_URL ? "Configurato ✅" : "Non configurato ❌");
 
 var PRESETS = {
     'dark_red': 'linear-gradient(135deg,#000 0%,#1a0000 40%,#8b0000 100%)',
@@ -231,10 +240,13 @@ var PRESETS = {
 };
 
 function avviaSidebar(slides) {
-    // Pulisci timer e interval esistenti
+    console.log('🎬 avviaSidebar:', slides ? slides.length : 0, 'slide');
+    
+    // Pulisci timer e interval
     if (sidebarTimer) {
         clearTimeout(sidebarTimer);
         sidebarTimer = null;
+        console.log('⏹ Timer fermato');
     }
     Object.keys(countdownIntervals).forEach(id => {
         clearInterval(countdownIntervals[id]);
@@ -242,7 +254,7 @@ function avviaSidebar(slides) {
     });
     
     if (!slides || !slides.length) {
-        console.log('Nessuna slide attiva, mostro slide default corsi');
+        console.log('📋 Nessuna slide, uso default');
         sidebarSlides = [{ 
             id: 'default-corsi',
             tipo: 'corsi', 
@@ -257,35 +269,40 @@ function avviaSidebar(slides) {
         }];
     } else {
         sidebarSlides = slides;
+        console.log('📋 Caricate:', sidebarSlides.map(s => s.tipo).join(', '));
     }
     
     sidebarIndice = 0;
+    console.log('▶️ Avvio da slide 0');
     mostraSlide(0);
 }
 
 function mostraSlide(idx) {
-    if (!sidebarSlides.length) return;
+    if (!sidebarSlides.length) {
+        console.warn('⚠️ mostraSlide: sidebarSlides vuoto');
+        return;
+    }
     
-    // Normalizza indice
     idx = idx % sidebarSlides.length;
     
-    // Verifica che la slide sia attiva (potrebbe essere stata disattivata da countdown)
-    // Se non è attiva, salta alla successiva
+    // Verifica slide attiva
     let tentativi = 0;
     while (tentativi < sidebarSlides.length && (!sidebarSlides[idx] || !sidebarSlides[idx].attivo)) {
         idx = (idx + 1) % sidebarSlides.length;
         tentativi++;
     }
     
-    // Se tutte le slide sono disattive, ricarica dati
     if (tentativi >= sidebarSlides.length) {
-        console.log('Nessuna slide attiva, ricarico dati...');
+        console.log('❌ Nessuna slide attiva, ricarico...');
         setTimeout(() => aggiornaDaAPI(), 500);
         return;
     }
     
     sidebarIndice = idx;
     const slide = sidebarSlides[idx];
+    
+    console.log(`📺 Slide ${idx + 1}/${sidebarSlides.length} - ${slide.tipo} (${slide.durata}s)`);
+    
     const cfg = (() => { try { return JSON.parse(slide.contenuto || '{}'); } catch(e) { return {}; } })();
 
     const widget    = document.getElementById('sidebar-widget');
@@ -320,8 +337,19 @@ function mostraSlide(idx) {
         widget.classList.remove('fade-out');
         widget.classList.add('fade-in');
 
-        if (sidebarTimer) clearTimeout(sidebarTimer);
-        sidebarTimer = setTimeout(() => mostraSlide(sidebarIndice + 1), (parseInt(slide.durata)||10) * 1000);
+        // CRITICO: Pulisci timer PRIMA di crearne uno nuovo
+        if (sidebarTimer) {
+            clearTimeout(sidebarTimer);
+            console.log('⏹ Timer pulito');
+        }
+        
+        const durataMs = (parseInt(slide.durata) || 10) * 1000;
+        console.log(`⏱️ Prossima tra ${durataMs/1000}s`);
+        
+        sidebarTimer = setTimeout(() => {
+            console.log('⏭️ Cambio slide');
+            mostraSlide(sidebarIndice + 1);
+        }, durataMs);
     }, 600);
 }
 
@@ -783,16 +811,24 @@ async function caricaCorsi() {
             const clean = cols.map(c => c ? c.trim().replace(/^"|"$/g, '') : '');
             return { giorno:clean[0]||'', orario:clean[1]||'', corso:clean[2]||'', club:clean[3]||'', durata:parseInt(clean[4])||60 };
         });
+
+        // Log per debug
+        console.log('📋 Tutti i corsi dal CSV:', corsiAll.length);
+        console.log('📋 Giorno oggi:', oggi, '| Club dispositivo:', CLUB || '(nessuno)');
+
         corsiOggi = corsiAll.filter(c => {
             if (c.giorno !== oggi) return false;
-            if (CLUB && c.club.toLowerCase() !== CLUB.toLowerCase()) return false;
+            // Se CLUB è vuoto mostra tutti, altrimenti filtra per club
+            if (CLUB && c.club && c.club.toLowerCase().trim() !== CLUB.toLowerCase().trim()) return false;
             const p = c.orario.split(':');
             return (parseInt(p[0]) * 60 + parseInt(p[1]) + c.durata) > oraOra;
         }).sort((a, b) => a.orario.localeCompare(b.orario));
+
+        console.log('✅ Corsi filtrati per oggi:', corsiOggi.length);
         setTimeout(caricaCorsi, 3600000);
-    } catch(e) { 
+    } catch(e) {
         console.error('Errore caricamento corsi:', e);
-        setTimeout(caricaCorsi, 60000); 
+        setTimeout(caricaCorsi, 60000);
     }
 }
 

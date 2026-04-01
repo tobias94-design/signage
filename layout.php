@@ -846,7 +846,10 @@ if(sfondoPreset){
 function toggleAttivo(id, val){
     var fd=new FormData();
     fd.append('azione','toggle_attivo'); fd.append('id',id); fd.append('attivo',val);
-    fetch('/layout.php',{method:'POST',body:fd}).then(function(){ location.reload(); });
+    fetch('/layout.php',{method:'POST',body:fd})
+        .then(r => r.text())
+        .then(function(){ location.reload(); })
+        .catch(function(){ location.reload(); });
 }
 
 // ── Drag & drop riordina slide ──
