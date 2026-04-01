@@ -326,30 +326,28 @@ function mostraSlide(idx) {
         }
         contentEl.style.color = colTesto;
 
-        switch (slide.tipo) {
-            case 'corsi':     renderCorsi(contentEl, slide, colTesto); break;
-            case 'countdown': renderCountdown(contentEl, slide, cfg, colTesto); break;
-            case 'meteo':     renderMeteo(contentEl, slide, cfg, colTesto); break;
-            case 'info':      renderInfo(contentEl, slide, cfg, colTesto); break;
-            default:          renderInfo(contentEl, slide, cfg, colTesto);
-        }
+       // Renderizza e aspetta le funzioni async
+        const renderPromise = (() => {
+            switch (slide.tipo) {
+                case 'corsi':     renderCorsi(contentEl, slide, colTesto); return Promise.resolve();
+                case 'countdown': renderCountdown(contentEl, slide, cfg, colTesto); return Promise.resolve();
+                case 'meteo':     return renderMeteo(contentEl, slide, cfg, colTesto);
+                case 'info':      renderInfo(contentEl, slide, cfg, colTesto); return Promise.resolve();
+                default:          renderInfo(contentEl, slide, cfg, colTesto); return Promise.resolve();
+            }
+        })();
 
-        widget.classList.remove('fade-out');
-        widget.classList.add('fade-in');
+        renderPromise.catch(e => {
+            console.error('Errore rendering slide:', e);
+            contentEl.innerHTML = `<div class="widget-header">Errore</div>`;
+        }).finally(() => {
+            widget.classList.remove('fade-out');
+            widget.classList.add('fade-in');
 
-        // CRITICO: Pulisci timer PRIMA di crearne uno nuovo
-        if (sidebarTimer) {
-            clearTimeout(sidebarTimer);
-            console.log('⏹ Timer pulito');
-        }
-        
-        const durataMs = (parseInt(slide.durata) || 10) * 1000;
-        console.log(`⏱️ Prossima tra ${durataMs/1000}s`);
-        
-        sidebarTimer = setTimeout(() => {
-            console.log('⏭️ Cambio slide');
-            mostraSlide(sidebarIndice + 1);
-        }, durataMs);
+            if (sidebarTimer) clearTimeout(sidebarTimer);
+            const durataMs = (parseInt(slide.durata) || 10) * 1000;
+            sidebarTimer = setTimeout(() => mostraSlide(sidebarIndice + 1), durataMs);
+        });
     }, 600);
 }
 
@@ -920,11 +918,11 @@ document.addEventListener('DOMContentLoaded', () => {
     aggiornaOrologio();
     setInterval(aggiornaOrologio, 1000);
     avviaSegnaleTV();
-    caricaCorsi().then(() => {
-        avviaSidebar([{ tipo:'corsi', titolo:'In programma oggi', durata:30,
-                        colore_sfondo:'#111111', colore_testo:'#ffffff', sfondo:'', sfondo_preset:'', contenuto:'{}' }]);
-    });
-    setTimeout(aggiornaDaAPI, 500);
+    
+    // Prima carica i corsi, poi chiama l'API
+    // L'API avvierà il carousel con le slide corrette
+    caricaCorsi();
+    setTimeout(aggiornaDaAPI, 800);
 });
 </script>
 </body>
