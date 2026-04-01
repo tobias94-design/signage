@@ -514,46 +514,62 @@ async function fetchMeteo(citta, lat, lon) {
 async function renderMeteo(el, slide, cfg, colTesto) {
     const titolo = slide.titolo || cfg.citta || 'Meteo';
     el.innerHTML = `<div class="widget-header">${titolo}</div><div class="widget-meteo"><div style="font-size:40px;opacity:0.5;">Caricamento...</div></div>`;
-    const data = await fetchMeteo(cfg.citta, cfg.lat, cfg.lon);
-    if (!data || !data.current) {
-        el.innerHTML = `<div class="widget-header">${titolo}</div><div class="widget-meteo"><div style="font-size:24px;opacity:0.5;">Dati non disponibili</div></div>`;
-        return;
-    }
     
-    const cur = data.current;
-    const wmo = cur.weathercode;
+    // Timeout sicurezza: se il meteo non carica entro 8s passa alla prossima slide
+    const safetyTimer = setTimeout(() => {
+        el.innerHTML = `<div class="widget-header">${titolo}</div>
+            <div class="widget-meteo"><div style="font-size:24px;opacity:0.5;">Meteo non disponibile</div></div>`;
+    }, 8000);
     
-    // Previsioni 3 giorni (salta oggi, prendi i prossimi 3)
-    let previsioni = '';
-    if (data.daily && data.daily.time) {
-        const giorni = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
-        for (let i = 1; i <= 3 && i < data.daily.time.length; i++) {
-            const d = new Date(data.daily.time[i]);
-            const wmo_day = data.daily.weathercode[i];
-            const min = Math.round(data.daily.temperature_2m_min[i]);
-            const max = Math.round(data.daily.temperature_2m_max[i]);
-            previsioni += `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;font-size:14px;">
-                <span style="min-width:35px;">${giorni[d.getDay()]}</span>
-                <span style="font-size:20px;margin:0 8px;">${WMO_ICONS[wmo_day]||'🌡️'}</span>
-                <span style="opacity:0.65;font-size:13px;">Min${min}° Max${max}°</span>
-            </div>`;
+    try {
+        const data = await fetchMeteo(cfg.citta, cfg.lat, cfg.lon);
+        clearTimeout(safetyTimer);
+        
+        if (!data || !data.current) {
+            el.innerHTML = `<div class="widget-header">${titolo}</div>
+                <div class="widget-meteo"><div style="font-size:24px;opacity:0.5;">Dati non disponibili</div></div>`;
+            return;
         }
+        
+        const cur = data.current;
+        const wmo = cur.weathercode;
+        
+        let previsioni = '';
+        if (data.daily && data.daily.time) {
+            const giorni = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+            for (let i = 1; i <= 3 && i < data.daily.time.length; i++) {
+                const d = new Date(data.daily.time[i]);
+                const wmo_day = data.daily.weathercode[i];
+                const min = Math.round(data.daily.temperature_2m_min[i]);
+                const max = Math.round(data.daily.temperature_2m_max[i]);
+                previsioni += `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;font-size:14px;">
+                    <span style="min-width:35px;">${giorni[d.getDay()]}</span>
+                    <span style="font-size:20px;margin:0 8px;">${WMO_ICONS[wmo_day]||'🌡️'}</span>
+                    <span style="opacity:0.65;font-size:13px;">Min${min}° Max${max}°</span>
+                </div>`;
+            }
+        }
+        
+        el.innerHTML = `
+            <div class="widget-header">${titolo}</div>
+            <div class="widget-meteo">
+                <div class="meteo-icona">${WMO_ICONS[wmo]||'🌡️'}</div>
+                <div class="meteo-temp">${Math.round(cur.temperature_2m)}°C</div>
+                <div class="meteo-desc">${WMO_DESC[wmo]||''}</div>
+                <div class="meteo-citta">${cfg.citta||''}</div>
+                <div class="meteo-dettagli"><span>💧 ${cur.relativehumidity_2m}%</span><span>💨 ${Math.round(cur.windspeed_10m)} km/h</span></div>
+            </div>
+            ${previsioni ? `
+            <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.15);">
+                <div style="font-size:11px;opacity:0.5;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">Prossimi 3 giorni</div>
+                ${previsioni}
+            </div>` : ''}`;
+    } catch(e) {
+        clearTimeout(safetyTimer);
+        console.error('Errore meteo:', e);
+        el.innerHTML = `<div class="widget-header">${titolo}</div>
+            <div class="widget-meteo"><div style="font-size:24px;opacity:0.5;">Meteo non disponibile</div></div>`;
     }
-    
-    el.innerHTML = `
-        <div class="widget-header">${titolo}</div>
-        <div class="widget-meteo">
-            <div class="meteo-icona">${WMO_ICONS[wmo]||'🌡️'}</div>
-            <div class="meteo-temp">${Math.round(cur.temperature_2m)}°C</div>
-            <div class="meteo-desc">${WMO_DESC[wmo]||''}</div>
-            <div class="meteo-citta">${cfg.citta||''}</div>
-            <div class="meteo-dettagli"><span>💧 ${cur.relativehumidity_2m}%</span><span>💨 ${Math.round(cur.windspeed_10m)} km/h</span></div>
-        </div>
-        ${previsioni ? `
-        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.15);">
-            <div style="font-size:11px;opacity:0.5;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">Prossimi 3 giorni</div>
-            ${previsioni}
-        </div>` : ''}`;
 }
 
 // ── RENDER INFO ───────────────────────────────────────────────────
