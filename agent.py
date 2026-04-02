@@ -356,6 +356,7 @@ Write-Host "Setup kiosk completato"
 def main():
     log(f"=== PixelBridge Agent v{VERSION} ===")
     log(f"Server: {SERVER_URL} | Macchina: {get_machine_name()}")
+    log(f"Config file: {CONFIG_FILE}")
 
     installa_autostart()
     setup_kiosk_se_necessario()  # solo al primo avvio
@@ -363,10 +364,20 @@ def main():
 
     cfg   = load_config()
     token = cfg.get('token')
+    
+    log(f"Config caricato: {cfg}")
+    log(f"Token trovato: {token if token else 'NESSUNO'}")
 
     if not token:
         log("Nessun token — avvio pairing")
         token = do_pairing()
+        
+        # Verifica che il token sia stato salvato
+        cfg_check = load_config()
+        if cfg_check.get('token') == token:
+            log(f"✅ Token salvato correttamente: {token}")
+        else:
+            log(f"❌ ERRORE: Token NON salvato! File: {CONFIG_FILE}")
 
     if token:
         run_player(token)

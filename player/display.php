@@ -219,12 +219,7 @@ let sidebarSlides = [];
 let sidebarIndice = 0;
 let sidebarTimer  = null;
 let meteoCache    = {};
-let countdownIntervals = {};
-
-console.log('%c🚀 PIXELBRIDGE PLAYER AVVIATO', 'background: #e94560; color: #fff; padding: 4px 8px; font-weight: bold;');
-console.log('📍 Token:', TOKEN);
-console.log('🏢 Club:', CLUB || 'Non specificato');
-console.log('📊 Sheet URL:', SHEET_URL ? 'Configurato ✅' : 'Non configurato ❌'); // Traccia gli interval dei countdown attivi
+let countdownIntervals = {}; // Traccia gli interval dei countdown attivi
 console.log("%c🚀 PIXELBRIDGE PLAYER AVVIATO", "background: #e94560; color: #fff; padding: 4px 8px; font-weight: bold;");
 console.log("📍 Token:", TOKEN);
 console.log("🏢 Club:", CLUB || "Non specificato");
@@ -240,13 +235,10 @@ var PRESETS = {
 };
 
 function avviaSidebar(slides) {
-    console.log('🎬 avviaSidebar:', slides ? slides.length : 0, 'slide');
-    
-    // Pulisci timer e interval
+    // Pulisci timer e interval esistenti
     if (sidebarTimer) {
         clearTimeout(sidebarTimer);
         sidebarTimer = null;
-        console.log('⏹ Timer fermato');
     }
     Object.keys(countdownIntervals).forEach(id => {
         clearInterval(countdownIntervals[id]);
@@ -254,7 +246,7 @@ function avviaSidebar(slides) {
     });
     
     if (!slides || !slides.length) {
-        console.log('📋 Nessuna slide, uso default');
+        console.log('Nessuna slide attiva, mostro slide default corsi');
         sidebarSlides = [{ 
             id: 'default-corsi',
             tipo: 'corsi', 
@@ -269,40 +261,35 @@ function avviaSidebar(slides) {
         }];
     } else {
         sidebarSlides = slides;
-        console.log('📋 Caricate:', sidebarSlides.map(s => s.tipo).join(', '));
     }
     
     sidebarIndice = 0;
-    console.log('▶️ Avvio da slide 0');
     mostraSlide(0);
 }
 
 function mostraSlide(idx) {
-    if (!sidebarSlides.length) {
-        console.warn('⚠️ mostraSlide: sidebarSlides vuoto');
-        return;
-    }
+    if (!sidebarSlides.length) return;
     
+    // Normalizza indice
     idx = idx % sidebarSlides.length;
     
-    // Verifica slide attiva
+    // Verifica che la slide sia attiva (potrebbe essere stata disattivata da countdown)
+    // Se non è attiva, salta alla successiva
     let tentativi = 0;
     while (tentativi < sidebarSlides.length && (!sidebarSlides[idx] || !sidebarSlides[idx].attivo)) {
         idx = (idx + 1) % sidebarSlides.length;
         tentativi++;
     }
     
+    // Se tutte le slide sono disattive, ricarica dati
     if (tentativi >= sidebarSlides.length) {
-        console.log('❌ Nessuna slide attiva, ricarico...');
+        console.log('Nessuna slide attiva, ricarico dati...');
         setTimeout(() => aggiornaDaAPI(), 500);
         return;
     }
     
     sidebarIndice = idx;
     const slide = sidebarSlides[idx];
-    
-    console.log(`📺 Slide ${idx + 1}/${sidebarSlides.length} - ${slide.tipo} (${slide.durata}s)`);
-    
     const cfg = (() => { try { return JSON.parse(slide.contenuto || '{}'); } catch(e) { return {}; } })();
 
     const widget    = document.getElementById('sidebar-widget');
@@ -326,35 +313,28 @@ function mostraSlide(idx) {
         }
         contentEl.style.color = colTesto;
 
-       // Renderizza e aspetta le funzioni async
-        const renderPromise = (() => {
-            switch (slide.tipo) {
-                case 'corsi':     renderCorsi(contentEl, slide, colTesto); return Promise.resolve();
-                case 'countdown': renderCountdown(contentEl, slide, cfg, colTesto); return Promise.resolve();
-                case 'meteo':     return renderMeteo(contentEl, slide, cfg, colTesto);
-                case 'info':      renderInfo(contentEl, slide, cfg, colTesto); return Promise.resolve();
-                default:          renderInfo(contentEl, slide, cfg, colTesto); return Promise.resolve();
-            }
-        })();
+        switch (slide.tipo) {
+            case 'corsi':     renderCorsi(contentEl, slide, colTesto); break;
+            case 'countdown': renderCountdown(contentEl, slide, cfg, colTesto); break;
+            case 'meteo':     renderMeteo(contentEl, slide, cfg, colTesto); break;
+            case 'info':      renderInfo(contentEl, slide, cfg, colTesto); break;
+            default:          renderInfo(contentEl, slide, cfg, colTesto);
+        }
 
-        renderPromise.catch(e => {
-            console.error('Errore rendering slide:', e);
-            contentEl.innerHTML = `<div class="widget-header">Errore</div>`;
-        }).finally(() => {
-            widget.classList.remove('fade-out');
-            widget.classList.add('fade-in');
+        widget.classList.remove('fade-out');
+        widget.classList.add('fade-in');
 
-            if (sidebarTimer) clearTimeout(sidebarTimer);
-            const durataMs = (parseInt(slide.durata) || 10) * 1000;
-            sidebarTimer = setTimeout(() => mostraSlide(sidebarIndice + 1), durataMs);
-        });
+        if (sidebarTimer) clearTimeout(sidebarTimer);
+        sidebarTimer = setTimeout(() => mostraSlide(sidebarIndice + 1), (parseInt(slide.durata)||10) * 1000);
     }, 600);
 }
 
 // ── RENDER CORSI ─────────────────────────────────────────────────
 function renderCorsi(el, slide, colTesto) {
     const oraOra  = new Date().getHours() * 60 + new Date().getMinutes();
+    console.log("📋 Rendering slide corsi - corsiOggi.length:", corsiOggi.length);
     const filtrati = corsiOggi.filter(c => {
+    console.log("📋 Corsi filtrati per oggi:", filtrati.length);
         const p = c.orario.split(':');
         return (parseInt(p[0]) * 60 + parseInt(p[1]) + c.durata) > oraOra;
     });
@@ -512,62 +492,46 @@ async function fetchMeteo(citta, lat, lon) {
 async function renderMeteo(el, slide, cfg, colTesto) {
     const titolo = slide.titolo || cfg.citta || 'Meteo';
     el.innerHTML = `<div class="widget-header">${titolo}</div><div class="widget-meteo"><div style="font-size:40px;opacity:0.5;">Caricamento...</div></div>`;
-    
-    // Timeout sicurezza: se il meteo non carica entro 8s passa alla prossima slide
-    const safetyTimer = setTimeout(() => {
-        el.innerHTML = `<div class="widget-header">${titolo}</div>
-            <div class="widget-meteo"><div style="font-size:24px;opacity:0.5;">Meteo non disponibile</div></div>`;
-    }, 8000);
-    
-    try {
-        const data = await fetchMeteo(cfg.citta, cfg.lat, cfg.lon);
-        clearTimeout(safetyTimer);
-        
-        if (!data || !data.current) {
-            el.innerHTML = `<div class="widget-header">${titolo}</div>
-                <div class="widget-meteo"><div style="font-size:24px;opacity:0.5;">Dati non disponibili</div></div>`;
-            return;
-        }
-        
-        const cur = data.current;
-        const wmo = cur.weathercode;
-        
-        let previsioni = '';
-        if (data.daily && data.daily.time) {
-            const giorni = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
-            for (let i = 1; i <= 3 && i < data.daily.time.length; i++) {
-                const d = new Date(data.daily.time[i]);
-                const wmo_day = data.daily.weathercode[i];
-                const min = Math.round(data.daily.temperature_2m_min[i]);
-                const max = Math.round(data.daily.temperature_2m_max[i]);
-                previsioni += `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;font-size:14px;">
-                    <span style="min-width:35px;">${giorni[d.getDay()]}</span>
-                    <span style="font-size:20px;margin:0 8px;">${WMO_ICONS[wmo_day]||'🌡️'}</span>
-                    <span style="opacity:0.65;font-size:13px;">Min${min}° Max${max}°</span>
-                </div>`;
-            }
-        }
-        
-        el.innerHTML = `
-            <div class="widget-header">${titolo}</div>
-            <div class="widget-meteo">
-                <div class="meteo-icona">${WMO_ICONS[wmo]||'🌡️'}</div>
-                <div class="meteo-temp">${Math.round(cur.temperature_2m)}°C</div>
-                <div class="meteo-desc">${WMO_DESC[wmo]||''}</div>
-                <div class="meteo-citta">${cfg.citta||''}</div>
-                <div class="meteo-dettagli"><span>💧 ${cur.relativehumidity_2m}%</span><span>💨 ${Math.round(cur.windspeed_10m)} km/h</span></div>
-            </div>
-            ${previsioni ? `
-            <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.15);">
-                <div style="font-size:11px;opacity:0.5;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">Prossimi 3 giorni</div>
-                ${previsioni}
-            </div>` : ''}`;
-    } catch(e) {
-        clearTimeout(safetyTimer);
-        console.error('Errore meteo:', e);
-        el.innerHTML = `<div class="widget-header">${titolo}</div>
-            <div class="widget-meteo"><div style="font-size:24px;opacity:0.5;">Meteo non disponibile</div></div>`;
+    const data = await fetchMeteo(cfg.citta, cfg.lat, cfg.lon);
+    if (!data || !data.current) {
+        el.innerHTML = `<div class="widget-header">${titolo}</div><div class="widget-meteo"><div style="font-size:24px;opacity:0.5;">Dati non disponibili</div></div>`;
+        return;
     }
+    
+    const cur = data.current;
+    const wmo = cur.weathercode;
+    
+    // Previsioni 3 giorni (salta oggi, prendi i prossimi 3)
+    let previsioni = '';
+    if (data.daily && data.daily.time) {
+        const giorni = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+        for (let i = 1; i <= 3 && i < data.daily.time.length; i++) {
+            const d = new Date(data.daily.time[i]);
+            const wmo_day = data.daily.weathercode[i];
+            const min = Math.round(data.daily.temperature_2m_min[i]);
+            const max = Math.round(data.daily.temperature_2m_max[i]);
+            previsioni += `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;font-size:14px;">
+                <span style="min-width:35px;">${giorni[d.getDay()]}</span>
+                <span style="font-size:20px;margin:0 8px;">${WMO_ICONS[wmo_day]||'🌡️'}</span>
+                <span style="opacity:0.65;font-size:13px;">Min${min}° Max${max}°</span>
+            </div>`;
+        }
+    }
+    
+    el.innerHTML = `
+        <div class="widget-header">${titolo}</div>
+        <div class="widget-meteo">
+            <div class="meteo-icona">${WMO_ICONS[wmo]||'🌡️'}</div>
+            <div class="meteo-temp">${Math.round(cur.temperature_2m)}°C</div>
+            <div class="meteo-desc">${WMO_DESC[wmo]||''}</div>
+            <div class="meteo-citta">${cfg.citta||''}</div>
+            <div class="meteo-dettagli"><span>💧 ${cur.relativehumidity_2m}%</span><span>💨 ${Math.round(cur.windspeed_10m)} km/h</span></div>
+        </div>
+        ${previsioni ? `
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.15);">
+            <div style="font-size:11px;opacity:0.5;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">Prossimi 3 giorni</div>
+            ${previsioni}
+        </div>` : ''}`;
 }
 
 // ── RENDER INFO ───────────────────────────────────────────────────
@@ -608,31 +572,36 @@ function aggiornaOrologio() {
 const STREAM_URL = '<?php echo htmlspecialchars($stream_url); ?>';
 
 async function avviaSegnaleTV() {
+    const streamUrl = STREAM_URL;
+    await avviaSegnaleTVRuntime(streamUrl);
+}
+
+async function avviaSegnaleTVRuntime(streamUrl) {
     const v = document.getElementById('tv-video');
 
-    if (STREAM_URL) {
+    if (streamUrl) {
         // Modalità streaming HLS
         document.getElementById('tv-placeholder').style.display = 'none';
-        if (STREAM_URL.includes('.m3u8')) {
+        if (streamUrl.includes('.m3u8')) {
             // Stream HLS
             if (Hls.isSupported()) {
                 const hls = new Hls({ autoStartLoad: true, startLevel: -1 });
-                hls.loadSource(STREAM_URL);
+                hls.loadSource(streamUrl);
                 hls.attachMedia(v);
                 hls.on(Hls.Events.MANIFEST_PARSED, () => v.play().catch(() => {}));
                 hls.on(Hls.Events.ERROR, (e, data) => {
                     if (data.fatal) {
-                        setTimeout(() => { hls.loadSource(STREAM_URL); }, 5000);
+                        setTimeout(() => { hls.loadSource(streamUrl); }, 5000);
                     }
                 });
             } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
                 // Safari nativo
-                v.src = STREAM_URL;
+                v.src = streamUrl;
                 v.play().catch(() => {});
             }
         } else {
             // URL diretto (mp4, webm)
-            v.src = STREAM_URL;
+            v.src = streamUrl;
             v.play().catch(() => {});
         }
         return;
@@ -825,24 +794,16 @@ async function caricaCorsi() {
             const clean = cols.map(c => c ? c.trim().replace(/^"|"$/g, '') : '');
             return { giorno:clean[0]||'', orario:clean[1]||'', corso:clean[2]||'', club:clean[3]||'', durata:parseInt(clean[4])||60 };
         });
-
-        // Log per debug
-        console.log('📋 Tutti i corsi dal CSV:', corsiAll.length);
-        console.log('📋 Giorno oggi:', oggi, '| Club dispositivo:', CLUB || '(nessuno)');
-
         corsiOggi = corsiAll.filter(c => {
             if (c.giorno !== oggi) return false;
-            // Se CLUB è vuoto mostra tutti, altrimenti filtra per club
-            if (CLUB && c.club && c.club.toLowerCase().trim() !== CLUB.toLowerCase().trim()) return false;
+            if (CLUB && c.club.toLowerCase() !== CLUB.toLowerCase()) return false;
             const p = c.orario.split(':');
             return (parseInt(p[0]) * 60 + parseInt(p[1]) + c.durata) > oraOra;
         }).sort((a, b) => a.orario.localeCompare(b.orario));
-
-        console.log('✅ Corsi filtrati per oggi:', corsiOggi.length);
         setTimeout(caricaCorsi, 3600000);
-    } catch(e) {
+    } catch(e) { 
         console.error('Errore caricamento corsi:', e);
-        setTimeout(caricaCorsi, 60000);
+        setTimeout(caricaCorsi, 60000); 
     }
 }
 
@@ -897,8 +858,26 @@ async function aggiornaDaAPI() {
         }
 
         const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
+        const streamCambiato = statoCorrente && statoCorrente.stream_url !== stato.stream_url;
+        
         if (stato.modalita === 'tv') {
-            if (cambiata) mostraTV();
+            if (cambiata || streamCambiato) {
+                console.log('🔄 Cambio sorgente TV:', streamCambiato ? 'stream modificato' : 'modalità cambiata');
+                mostraTV();
+                // Ricarica il video con nuovo stream
+                if (streamCambiato || !statoCorrente) {
+                    const v = document.getElementById('tv-video');
+                    v.pause();
+                    v.src = '';
+                    v.srcObject = null;
+                    // Aspetta un po' prima di ricaricare per evitare conflitti
+                    setTimeout(() => {
+                        // Aggiorna la costante STREAM_URL (solo per compatibilità)
+                        window.STREAM_URL_RUNTIME = stato.stream_url || '';
+                        avviaSegnaleTVRuntime(stato.stream_url || '');
+                    }, 500);
+                }
+            }
             setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
         } else if (stato.modalita === 'adv') {
             if (cambiata) mostraADV(stato);
@@ -918,11 +897,11 @@ document.addEventListener('DOMContentLoaded', () => {
     aggiornaOrologio();
     setInterval(aggiornaOrologio, 1000);
     avviaSegnaleTV();
-    
-    // Prima carica i corsi, poi chiama l'API
-    // L'API avvierà il carousel con le slide corrette
-    caricaCorsi();
-    setTimeout(aggiornaDaAPI, 800);
+    caricaCorsi().then(() => {
+        avviaSidebar([{ tipo:'corsi', titolo:'In programma oggi', durata:30,
+                        colore_sfondo:'#111111', colore_testo:'#ffffff', sfondo:'', sfondo_preset:'', contenuto:'{}' }]);
+    });
+    setTimeout(aggiornaDaAPI, 500);
 });
 </script>
 </body>

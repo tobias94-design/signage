@@ -167,6 +167,7 @@ if ($posizione_ciclo < $intervallo_sec) {
         'profilo'          => $profilo['nome'],
         'evento_attivo'    => $evento_attivo ? $evento_attivo['nome'] : null,
         'sidebar_slides'   => getSidebarSlides($db, $profilo['id'], $token),
+        'stream_url'       => $dispositivo['stream_url'] ?? '',
         'debug'            => "TV per altri {$secondi_alla_adv}s"
     ];
 } else {

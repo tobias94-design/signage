@@ -1,22 +1,23 @@
 @echo off
-echo ==========================================
-echo    SIGNAGE MANAGER - Avvio in corso...
-echo ==========================================
+REM PixelBridge Agent Launcher - Avvio Nascosto
+REM Lancia l'agent Python completamente invisibile
 
-:: Avvia MAMP
-start "" "C:\MAMP\MAMP.exe"
-echo MAMP avviato, attendo 5 secondi...
-timeout /t 5 /nobreak > nul
+cd /d "%~dp0"
 
-:: Apri il player in Chrome a schermo intero
-echo Apertura player...
-start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
-  --kiosk ^
-  --fullscreen ^
-  --noerrdialogs ^
-  --disable-infobars ^
-  --disable-session-crashed-bubble ^
-  --no-first-run ^
-  "http://localhost:8888/player/?token=soave-85faa7"
+REM Verifica Python
+python --version >nul 2>&1
+if errorlevel 1 (
+    msg * "ERRORE: Python non installato! Scaricalo da python.org"
+    exit /b 1
+)
 
-echo Player avviato!
+REM Lancia agent.py COMPLETAMENTE NASCOSTO con pythonw (no console)
+start "" /B pythonw agent.py
+
+REM Crea un VBS per mostrare notifica (opzionale)
+echo Set objShell = CreateObject("WScript.Shell") > "%TEMP%\pb_start.vbs"
+echo objShell.Popup "PixelBridge Agent avviato", 3, "PixelBridge", 64 >> "%TEMP%\pb_start.vbs"
+wscript //nologo "%TEMP%\pb_start.vbs"
+del "%TEMP%\pb_start.vbs"
+
+exit
