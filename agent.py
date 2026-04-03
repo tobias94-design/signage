@@ -9,7 +9,14 @@ import urllib.request, urllib.parse, shutil, tempfile
 
 # ── CONFIGURAZIONE ────────────────────────────────────────────
 VERSION     = '1.0.3'
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
+
+# Determina directory exe/script
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 SERVER_URL  = 'http://204.168.161.116'
 PING_INTERVAL   = 60
 PAIRING_TIMEOUT = 600
