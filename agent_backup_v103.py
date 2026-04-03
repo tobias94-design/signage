@@ -8,7 +8,8 @@ import os, sys, json, time, random, socket, subprocess, threading
 import urllib.request, urllib.parse, shutil, tempfile
 
 # ── CONFIGURAZIONE ────────────────────────────────────────────
-VERSION     = '1.0.4'
+VERSION     = '1.0.3'
+
 # Determina directory exe/script
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
