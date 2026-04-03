@@ -1,5 +1,17 @@
 <?php
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-$v = trim(file_get_contents(__DIR__ . '/../version.txt') ?: '1.0.0');
-echo json_encode(['version' => $v, 'download' => 'https://github.com/tobias94-design/signage/releases/latest/download/PixelBridge.exe']);
+
+$latest_version = '1.0.4';
+$download_url = 'https://github.com/tobias94-design/signage/releases/download/v1.0.4/PixelBridge-v1.0.4.zip';
+
+echo json_encode([
+    'version' => $latest_version,
+    'download' => $download_url,
+    'changelog' => [
+        'Agent stabile basato su v1.0.1',
+        'Fix BASE_DIR per config.json',
+        'Pairing automatico',
+        'Auto-start Windows',
+        'Taskbar nascosta'
+    ]
+]);
