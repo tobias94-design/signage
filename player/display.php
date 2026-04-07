@@ -38,96 +38,23 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; cursor: none !important; }
-
-        html, body {
-            width: 100vw; height: 100vh;
-            overflow: hidden; background: #000;
-            font-family: 'Figtree', sans-serif;
-        }
-
-        #player-root {
-            position: absolute;
-            width: 1920px; height: 1080px;
-            top: 0; left: 0;
-            transform-origin: top left;
-            overflow: hidden; background: #000;
-        }
-
-        #main {
-            position: absolute;
-            top: <?= $MAIN_TOP ?>px; left: 0;
-            width: 1920px; height: <?= $MAIN_H ?>px;
-            display: flex; flex-direction: row;
-        }
-
-        #layer-tv {
-            flex: 1; background: #111;
-            position: relative; overflow: hidden;
-        }
-        #tv-video {
-            position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%; object-fit: cover;
-        }
-        #tv-placeholder {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            color: #222; font-size: 32px; text-align: center;
-        }
-
-        #layer-adv {
-            position: absolute;
-            top: 0; left: 0;
-            width: 1920px; height: 1080px;
-            background: #000; display: none; z-index: 20;
-        }
-        #adv-video {
-            position: absolute; top: 0; left: 0;
-            width: 1920px; height: 1080px; object-fit: contain;
-        }
-        #adv-immagine {
-            position: absolute; top: 0; left: 0;
-            width: 1920px; height: 1080px;
-            object-fit: contain; display: none;
-        }
-
-        #colonna-corsi {
-            width: <?= $SIDEBAR_W ?>px; background: #111;
-            display: flex; flex-direction: column;
-            overflow: hidden; border-left: 2px solid #222;
-            position: relative;
-        }
-
-        /* ── WIDGET CAROUSEL ── */
-        #sidebar-widget {
-            position: absolute; inset: 0;
-            display: flex; flex-direction: column;
-            transition: opacity 0.6s ease;
-        }
+        html, body { width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: 'Figtree', sans-serif; }
+        #player-root { position: absolute; width: 1920px; height: 1080px; top: 0; left: 0; transform-origin: top left; overflow: hidden; background: #000; }
+        #main { position: absolute; top: <?= $MAIN_TOP ?>px; left: 0; width: 1920px; height: <?= $MAIN_H ?>px; display: flex; flex-direction: row; }
+        #layer-tv { flex: 1; background: #111; position: relative; overflow: hidden; }
+        #tv-video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        #tv-placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #222; font-size: 32px; text-align: center; }
+        #layer-adv { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; background: #000; display: none; z-index: 20; }
+        #adv-video { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; object-fit: contain; }
+        #adv-immagine { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; object-fit: contain; display: none; }
+        #colonna-corsi { width: <?= $SIDEBAR_W ?>px; background: #111; display: flex; flex-direction: column; overflow: hidden; border-left: 2px solid #222; position: relative; }
+        #sidebar-widget { position: absolute; inset: 0; display: flex; flex-direction: column; transition: opacity 0.6s ease; }
         #sidebar-widget.fade-out { opacity: 0; }
         #sidebar-widget.fade-in  { opacity: 1; }
-
-        .widget-sfondo {
-            position: absolute; inset: 0;
-            background-size: cover; background-position: center;
-            z-index: 0;
-        }
-        .widget-overlay {
-            position: absolute; inset: 0;
-            background: rgba(0,0,0,0.45); z-index: 1;
-        }
-        .widget-content {
-            position: relative; z-index: 2;
-            height: 100%; display: flex; flex-direction: column;
-            padding: 28px 28px 20px;
-        }
-
-        .widget-header {
-            font-size: 16px; letter-spacing: 3px; text-transform: uppercase;
-            color: rgba(255,255,255,0.55); font-weight: 400;
-            border-bottom: 1px solid rgba(255,255,255,0.15);
-            padding-bottom: 14px; margin-bottom: 20px; flex-shrink: 0;
-        }
-
+        .widget-sfondo { position: absolute; inset: 0; background-size: cover; background-position: center; z-index: 0; }
+        .widget-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.45); z-index: 1; }
+        .widget-content { position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column; padding: 28px 28px 20px; }
+        .widget-header { font-size: 16px; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,0.55); font-weight: 400; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 14px; margin-bottom: 20px; flex-shrink: 0; }
         .widget-countdown { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; }
         .countdown-pre { font-size: 18px; opacity: 0.75; text-align: center; margin-bottom: 8px; font-weight: 300; }
         .countdown-titolo { font-size: 28px; font-weight: bold; text-align: center; line-height: 1.3; }
@@ -135,27 +62,16 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
         .countdown-blocco { text-align: center; }
         .countdown-num { font-size: 64px; font-weight: 900; line-height: 1; letter-spacing: -2px; }
         .countdown-label { font-size: 14px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.6; margin-top: 4px; }
-
         .widget-meteo { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; }
         .meteo-icona { font-size: 80px; line-height: 1; }
         .meteo-temp { font-size: 72px; font-weight: 900; letter-spacing: -2px; }
         .meteo-desc { font-size: 22px; opacity: 0.75; text-transform: capitalize; text-align: center; }
         .meteo-citta { font-size: 18px; opacity: 0.55; letter-spacing: 2px; margin-top: 8px; }
         .meteo-dettagli { display: flex; gap: 24px; margin-top: 12px; font-size: 16px; opacity: 0.65; }
-
         .widget-info { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
         .info-icona { font-size: 56px; line-height: 1; }
         .info-testo { font-size: 26px; line-height: 1.5; font-weight: 300; }
-
-        #layer-banner {
-            position: absolute;
-            left: 0; right: 0;
-            <?= $BANNER_POS === 'top' ? 'top: 0;' : 'bottom: 0;' ?>
-            height: <?= $BANNER_H ?>px; background: #000;
-            display: flex; align-items: center;
-            z-index: 30; overflow: hidden;
-            transition: background-color 0.3s;
-        }
+        #layer-banner { position: absolute; left: 0; right: 0; <?= $BANNER_POS === 'top' ? 'top: 0;' : 'bottom: 0;' ?> height: <?= $BANNER_H ?>px; background: #000; display: flex; align-items: center; z-index: 30; overflow: hidden; transition: background-color 0.3s; }
         #banner-logo-wrap { display:flex; align-items:center; justify-content:flex-start; flex-shrink:0; }
         #banner-logo { object-fit:contain; display:none; }
         .banner-sep { width:1px; background:rgba(255,255,255,0.3); align-self:stretch; margin:14px 0; flex-shrink:0; }
@@ -165,7 +81,6 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
 </head>
 <body>
 <div id="player-root">
-
     <div id="main">
         <div id="layer-tv">
             <div id="tv-placeholder">📺 In attesa segnale TV...</div>
@@ -179,22 +94,17 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
             </div>
         </div>
     </div>
-
     <div id="layer-adv">
         <video id="adv-video" preload="auto" muted playsinline autoplay></video>
         <img id="adv-immagine" src="">
     </div>
-
     <div id="layer-banner">
-        <div id="banner-logo-wrap">
-            <img id="banner-logo" src="">
-        </div>
+        <div id="banner-logo-wrap"><img id="banner-logo" src=""></div>
         <div class="banner-sep"></div>
         <div id="banner-data-centro"></div>
         <div class="banner-sep"></div>
         <div id="banner-ora-dx">--:--:--</div>
     </div>
-
 </div>
 
 <script>
@@ -204,25 +114,25 @@ const BASE_URL  = '/';
 const SHEET_URL = '<?php echo htmlspecialchars($sheet_url); ?>';
 
 const GIORNI_IT = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
-const MESI      = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
-                   'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+const MESI      = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 
 let statoCorrente = null, advTimer = null, indiceContenuto = 0;
 let contenuti = [], corsiOggi = [];
 let bannerColore = '#000000', bannerTestoColore = '#ffffff';
 let modalitaAttuale = 'tv';
 
-// ── SIDEBAR CAROUSEL ─────────────────────────────────────────────
 let sidebarSlides = [];
 let sidebarIndice = 0;
 let sidebarTimer  = null;
 let meteoCache    = {};
 let countdownIntervals = {};
 
-console.log("%c🚀 PIXELBRIDGE PLAYER AVVIATO", "background: #e94560; color: #fff; padding: 4px 8px; font-weight: bold;");
-console.log("📍 Token:", TOKEN);
-console.log("🏢 Club:", CLUB || "Non specificato");
-console.log("📊 Sheet URL:", SHEET_URL ? "Configurato ✅" : "Non configurato ❌");
+// Fingerprint per evitare restart carousel inutili
+// Usa solo id+tipo+attivo — ignora campi che cambiano spesso
+function slidesFingerprint(slides) {
+    return slides.map(s => s.id + ':' + s.tipo + ':' + (s.attivo ? 1 : 0)).join('|');
+}
+let slidesFingerpr = '';
 
 var PRESETS = {
     'dark_red': 'linear-gradient(135deg,#000 0%,#1a0000 40%,#8b0000 100%)',
@@ -233,6 +143,7 @@ var PRESETS = {
     'carbon':   'linear-gradient(135deg,#111 0%,#2a2a2a 100%)',
 };
 
+// ── SIDEBAR CAROUSEL ─────────────────────────────────────────────
 function avviaSidebar(slides) {
     if (sidebarTimer) { clearTimeout(sidebarTimer); sidebarTimer = null; }
     Object.keys(countdownIntervals).forEach(id => {
@@ -352,7 +263,6 @@ function renderCountdown(el, slide, cfg, colTesto) {
         clearInterval(countdownIntervals[slideId]);
         delete countdownIntervals[slideId];
     }
-
     el.innerHTML = `<div class="widget-header">${titolo}</div>
                     <div class="widget-countdown" id="countdown-content-${slideId}"></div>`;
 
@@ -570,8 +480,6 @@ function applicaBanner(banner) {
         sideEl.style.width = sidebarWidth + 'px';
     }
 
-    // NON aggiornare layer-adv qui — viene gestito da mostraADV/mostraTV
-
     const logo = document.getElementById('banner-logo');
     if (banner.logo) {
         logo.src = BASE_URL + 'assets/img/' + banner.logo;
@@ -601,26 +509,18 @@ function applicaBanner(banner) {
 // ── MODALITÀ TV ──────────────────────────────────────────────────
 function mostraTV() {
     modalitaAttuale = 'tv';
-
-    // Nascondi ADV
     document.getElementById('layer-adv').style.display = 'none';
-
-    // Mostra main
     document.getElementById('main').style.display = 'flex';
-
-    // Ripristina banner
     const banner = document.getElementById('layer-banner');
     banner.style.backgroundColor = bannerColore;
     document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
     document.getElementById('banner-data-centro').style.visibility = 'visible';
     document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
     document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
-
     const ora = document.getElementById('banner-ora-dx');
     ora.style.opacity = '1'; ora.style.color = bannerTestoColore;
     ora.style.textShadow = ''; ora.style.backgroundColor = '';
     ora.style.borderRadius = ''; ora.style.padding = '';
-
     const video = document.getElementById('adv-video');
     video.pause(); video.src = '';
     if (advTimer) { clearTimeout(advTimer); advTimer = null; }
@@ -635,26 +535,18 @@ function mostraADV(stato) {
         const idx = contenuti.findIndex(c => c.id === stato.contenuto_ora.id);
         if (idx >= 0) indiceContenuto = idx;
     }
-
-    // Nascondi main (TV + sidebar)
     document.getElementById('main').style.display = 'none';
-
-    // Layer ADV a TUTTO SCHERMO 1920x1080
     const advEl = document.getElementById('layer-adv');
     advEl.style.top     = '0';
     advEl.style.height  = '1080px';
     advEl.style.display = 'block';
     document.getElementById('adv-video').style.height    = '1080px';
     document.getElementById('adv-immagine').style.height = '1080px';
-
-    // Banner trasparente — solo orologio visibile (z-index 30 > adv z-index 20)
     const banner = document.getElementById('layer-banner');
     banner.style.backgroundColor = 'transparent';
     document.getElementById('banner-logo-wrap').style.visibility   = 'hidden';
     document.getElementById('banner-data-centro').style.visibility = 'hidden';
     document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'hidden');
-
-    // Orologio in sovrimpressione
     const ora = document.getElementById('banner-ora-dx');
     ora.style.opacity         = '1';
     ora.style.color           = '#ffffff';
@@ -662,11 +554,9 @@ function mostraADV(stato) {
     ora.style.backgroundColor = 'rgba(0,0,0,0.5)';
     ora.style.borderRadius    = '6px';
     ora.style.padding         = '4px 14px';
-
     const oraSize = parseInt(stato.banner?.ora_size) || 44;
     const bannerH = parseInt(stato.banner?.banner_altezza) || 80;
     ora.style.fontSize = Math.round(bannerH * (oraSize / 100)) + 'px';
-
     mostraContenuto(indiceContenuto);
 }
 
@@ -675,15 +565,11 @@ function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
     idx = idx % contenuti.length; indiceContenuto = idx;
     const c = contenuti[idx];
-
     const durata = c.tipo === 'video' ? 30 : (c.durata || 10);
-    fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&log_contenuto=' + c.id + '&log_durata=' + durata)
-        .catch(() => {});
-
+    fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&log_contenuto=' + c.id + '&log_durata=' + durata).catch(() => {});
     const video    = document.getElementById('adv-video');
     const immagine = document.getElementById('adv-immagine');
     const url = BASE_URL + 'uploads/' + c.file;
-
     if (c.tipo === 'video') {
         immagine.style.display = 'none'; video.style.display = 'block';
         video.muted = true; video.volume = 0; video.defaultMuted = true;
@@ -728,8 +614,6 @@ async function caricaCorsi() {
 }
 
 // ── API POLLING ──────────────────────────────────────────────────
-let slidesSerializ = '';
-
 async function aggiornaDaAPI() {
     try {
         const res   = await fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&t=' + Date.now());
@@ -740,15 +624,26 @@ async function aggiornaDaAPI() {
 
         if (stato.banner) applicaBanner(stato.banner);
 
+        // Confronta solo id+tipo+attivo — evita restart per campi irrilevanti
         const slideRicevute = stato.sidebar_slides || [];
-        const nuove = JSON.stringify(slideRicevute);
-        if (nuove !== slidesSerializ) {
-            slidesSerializ = nuove;
+        const fp = slidesFingerprint(slideRicevute);
+        if (fp !== slidesFingerpr) {
+            slidesFingerpr = fp;
             if (sidebarTimer) clearTimeout(sidebarTimer);
             Object.keys(countdownIntervals).forEach(id => {
                 clearInterval(countdownIntervals[id]); delete countdownIntervals[id];
             });
-            avviaSidebar(slideRicevute);
+            // Aggiorna i dati delle slide esistenti senza restartare il carousel
+            // se solo i contenuti sono cambiati (stesso set di id)
+            const vecchiIds = sidebarSlides.map(s => s.id).join('|');
+            const nuoviIds  = slideRicevute.map(s => s.id).join('|');
+            if (vecchiIds === nuoviIds && sidebarSlides.length > 0) {
+                // Aggiorna i dati in-place senza resettare l'indice
+                sidebarSlides = slideRicevute;
+            } else {
+                // Set di slide cambiato — restart dal primo
+                avviaSidebar(slideRicevute);
+            }
         }
 
         const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
@@ -781,10 +676,7 @@ document.addEventListener('DOMContentLoaded', () => {
     aggiornaOrologio();
     setInterval(aggiornaOrologio, 1000);
     avviaSegnaleTV();
-    caricaCorsi().then(() => {
-        avviaSidebar([{ tipo:'corsi', titolo:'In programma oggi', durata:30,
-                        colore_sfondo:'#111111', colore_testo:'#ffffff', sfondo:'', sfondo_preset:'', contenuto:'{}' }]);
-    });
+    caricaCorsi();
     setTimeout(aggiornaDaAPI, 500);
 });
 </script>
