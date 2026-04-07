@@ -1,21 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
-
-:: ============================================================
-::  PixelBridge Kiosk - Watchdog
-::  Avvia agent.py e lo riavvia se crasha
-:: ============================================================
-
 cd /d "%~dp0"
 
-echo  PixelBridge Watchdog avviato > "%~dp0kiosk.log"
+echo [AVVIO] PixelBridge Kiosk >> "%~dp0kiosk.log"
 
-if not exist "%~dp0agent.py" (
-    echo  ERRORE: agent.py non trovato >> "%~dp0kiosk.log"
-    exit /b 1
-)
-
-:: Trova Chrome
+:: ── TROVA CHROME ────────────────────────────────────────────
 set "CHROME="
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
     set "CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
@@ -27,30 +16,42 @@ if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" (
     set "CHROME=%LocalAppData%\Google\Chrome\Application\chrome.exe"
 )
 
-:: Scrivi il percorso Chrome nel log
-echo  Chrome: !CHROME! >> "%~dp0kiosk.log"
-
-:: Aggiungi il flag HTTP sicuro al profilo Chrome (una tantum)
-:: Serve per autorizzare getUserMedia su HTTP
-if not "!CHROME!"=="" (
-    reg add "HKLM\SOFTWARE\Policies\Google\Chrome\InsecureOriginPolicyBypassList" /v "1" /t REG_SZ /d "http://204.168.161.116" /f > nul 2>&1
+if "!CHROME!"=="" (
+    echo [ERRORE] Chrome non trovato >> "%~dp0kiosk.log"
+    exit /b 1
 )
 
-:: Attendi rete
-timeout /t 8 /nobreak > nul
+:: ── AVVIA AGENT.PY IN BACKGROUND (solo pairing + heartbeat) ─
+if exist "%~dp0agent.py" (
+    start "" /B python "%~dp0agent.py"
+)
 
-set "CICLO=0"
+:: ── ATTENDI RETE ────────────────────────────────────────────
+timeout /t 10 /nobreak > nul
 
-:LOOP
-set /a CICLO+=1
-echo  [Ciclo !CICLO!] Avvio agent.py >> "%~dp0kiosk.log"
+:: ── ATTENDI TOKEN ───────────────────────────────────────────
+:WAIT_TOKEN
+if not exist "%~dp0token.txt" (
+    echo [ATTESA] Token non ancora disponibile... >> "%~dp0kiosk.log"
+    timeout /t 3 /nobreak > nul
+    goto WAIT_TOKEN
+)
 
-taskkill /f /im pythonw.exe > nul 2>&1
+:: Leggi token dal file
+set /p TOKEN=<"%~dp0token.txt"
+set "DISPLAY_URL=http://204.168.161.116/player/display.php?token=!TOKEN!"
+echo [OK] Token: !TOKEN! >> "%~dp0kiosk.log"
+echo [OK] URL: !DISPLAY_URL! >> "%~dp0kiosk.log"
+
+:: ── LOOP WATCHDOG CHROME ────────────────────────────────────
+:CHROME_LOOP
+echo [AVVIO] Chrome kiosk... >> "%~dp0kiosk.log"
+
 taskkill /f /im chrome.exe > nul 2>&1
 timeout /t 2 /nobreak > nul
 
-python "%~dp0agent.py"
+start "" /wait "!CHROME!" --kiosk "!DISPLAY_URL!" --no-first-run --disable-infobars --autoplay-policy=no-user-gesture-required --user-data-dir="%~dp0chrome_profile"
 
-echo  [Ciclo !CICLO!] agent.py terminato. Riavvio tra 5s... >> "%~dp0kiosk.log"
+echo [CRASH] Chrome terminato, riavvio tra 5s >> "%~dp0kiosk.log"
 timeout /t 5 /nobreak > nul
-goto LOOP
+goto CHROME_LOOP
