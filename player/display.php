@@ -19,7 +19,6 @@ $club       = $dispositivo['club'] ?? '';
 $sheet_url  = $dispositivo['sheet_url'] ?? '';
 $stream_url = $dispositivo['stream_url'] ?? '';
 
-// Dimensioni layout dal profilo — calcolate lato PHP per CSS corretto subito
 $BANNER_H   = (int)($dispositivo['banner_altezza'] ?? 80);
 $BANNER_POS = $dispositivo['banner_posizione'] ?? 'bottom';
 $LOGO_SIZE  = (int)($dispositivo['logo_size'] ?? 75);
@@ -27,7 +26,6 @@ $DATA_SIZE  = (int)($dispositivo['data_size'] ?? 28);
 $ORA_SIZE   = (int)($dispositivo['ora_size'] ?? 44);
 $MAIN_H     = 1080 - $BANNER_H;
 $MAIN_TOP   = $BANNER_POS === 'top' ? $BANNER_H : 0;
-// Sidebar larghezza per mantenere 16:9 sulla TV
 $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
 ?>
 <!DOCTYPE html>
@@ -78,17 +76,17 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
 
         #layer-adv {
             position: absolute;
-            <?= $BANNER_POS === 'top' ? 'top:' . $BANNER_H . 'px' : 'top:0' ?>;
-            left: 0; width: 1920px; height: <?= $MAIN_H ?>px;
+            top: 0; left: 0;
+            width: 1920px; height: 1080px;
             background: #000; display: none; z-index: 20;
         }
         #adv-video {
             position: absolute; top: 0; left: 0;
-            width: 1920px; height: <?= $MAIN_H ?>px; object-fit: contain;
+            width: 1920px; height: 1080px; object-fit: contain;
         }
         #adv-immagine {
             position: absolute; top: 0; left: 0;
-            width: 1920px; height: <?= $MAIN_H ?>px;
+            width: 1920px; height: 1080px;
             object-fit: contain; display: none;
         }
 
@@ -214,12 +212,13 @@ let contenuti = [], corsiOggi = [];
 let bannerColore = '#000000', bannerTestoColore = '#ffffff';
 let modalitaAttuale = 'tv';
 
-// ── SIDEBAR CAROUSEL ──────────────────────────────────────────────
+// ── SIDEBAR CAROUSEL ─────────────────────────────────────────────
 let sidebarSlides = [];
 let sidebarIndice = 0;
 let sidebarTimer  = null;
 let meteoCache    = {};
-let countdownIntervals = {}; // Traccia gli interval dei countdown attivi
+let countdownIntervals = {};
+
 console.log("%c🚀 PIXELBRIDGE PLAYER AVVIATO", "background: #e94560; color: #fff; padding: 4px 8px; font-weight: bold;");
 console.log("📍 Token:", TOKEN);
 console.log("🏢 Club:", CLUB || "Non specificato");
@@ -235,59 +234,36 @@ var PRESETS = {
 };
 
 function avviaSidebar(slides) {
-    // Pulisci timer e interval esistenti
-    if (sidebarTimer) {
-        clearTimeout(sidebarTimer);
-        sidebarTimer = null;
-    }
+    if (sidebarTimer) { clearTimeout(sidebarTimer); sidebarTimer = null; }
     Object.keys(countdownIntervals).forEach(id => {
         clearInterval(countdownIntervals[id]);
         delete countdownIntervals[id];
     });
-    
     if (!slides || !slides.length) {
-        console.log('Nessuna slide attiva, mostro slide default corsi');
-        sidebarSlides = [{ 
-            id: 'default-corsi',
-            tipo: 'corsi', 
-            titolo: 'In programma oggi', 
-            durata: 30, 
-            colore_sfondo: '#111111', 
-            colore_testo: '#ffffff', 
-            sfondo: '', 
-            sfondo_preset: '', 
-            contenuto: '{}',
-            attivo: 1
+        sidebarSlides = [{
+            id: 'default-corsi', tipo: 'corsi', titolo: 'In programma oggi',
+            durata: 30, colore_sfondo: '#111111', colore_testo: '#ffffff',
+            sfondo: '', sfondo_preset: '', contenuto: '{}', attivo: 1
         }];
     } else {
         sidebarSlides = slides;
     }
-    
     sidebarIndice = 0;
     mostraSlide(0);
 }
 
 function mostraSlide(idx) {
     if (!sidebarSlides.length) return;
-    
-    // Normalizza indice
     idx = idx % sidebarSlides.length;
-    
-    // Verifica che la slide sia attiva (potrebbe essere stata disattivata da countdown)
-    // Se non è attiva, salta alla successiva
     let tentativi = 0;
     while (tentativi < sidebarSlides.length && (!sidebarSlides[idx] || !sidebarSlides[idx].attivo)) {
         idx = (idx + 1) % sidebarSlides.length;
         tentativi++;
     }
-    
-    // Se tutte le slide sono disattive, ricarica dati
     if (tentativi >= sidebarSlides.length) {
-        console.log('Nessuna slide attiva, ricarico dati...');
         setTimeout(() => aggiornaDaAPI(), 500);
         return;
     }
-    
     sidebarIndice = idx;
     const slide = sidebarSlides[idx];
     const cfg = (() => { try { return JSON.parse(slide.contenuto || '{}'); } catch(e) { return {}; } })();
@@ -300,7 +276,6 @@ function mostraSlide(idx) {
     widget.classList.add('fade-out');
     setTimeout(() => {
         const colTesto = slide.colore_testo || '#ffffff';
-
         if (slide.sfondo) {
             sfondoEl.style.cssText = `position:absolute;inset:0;background-size:cover;background-position:center;z-index:0;background-image:url('${BASE_URL}uploads/${slide.sfondo}')`;
             overlayEl.style.display = 'block';
@@ -312,7 +287,6 @@ function mostraSlide(idx) {
             overlayEl.style.display = 'none';
         }
         contentEl.style.color = colTesto;
-
         switch (slide.tipo) {
             case 'corsi':     renderCorsi(contentEl, slide, colTesto); break;
             case 'countdown': renderCountdown(contentEl, slide, cfg, colTesto); break;
@@ -320,10 +294,8 @@ function mostraSlide(idx) {
             case 'info':      renderInfo(contentEl, slide, cfg, colTesto); break;
             default:          renderInfo(contentEl, slide, cfg, colTesto);
         }
-
         widget.classList.remove('fade-out');
         widget.classList.add('fade-in');
-
         if (sidebarTimer) clearTimeout(sidebarTimer);
         sidebarTimer = setTimeout(() => mostraSlide(sidebarIndice + 1), (parseInt(slide.durata)||10) * 1000);
     }, 600);
@@ -331,14 +303,11 @@ function mostraSlide(idx) {
 
 // ── RENDER CORSI ─────────────────────────────────────────────────
 function renderCorsi(el, slide, colTesto) {
-    const oraOra  = new Date().getHours() * 60 + new Date().getMinutes();
-    console.log("📋 Rendering slide corsi - corsiOggi.length:", corsiOggi.length);
+    const oraOra = new Date().getHours() * 60 + new Date().getMinutes();
     const filtrati = corsiOggi.filter(c => {
-    console.log("📋 Corsi filtrati per oggi:", filtrati.length);
         const p = c.orario.split(':');
         return (parseInt(p[0]) * 60 + parseInt(p[1]) + c.durata) > oraOra;
     });
-
     let html = `<div class="widget-header">${slide.titolo || 'In programma oggi'}</div>`;
     if (!filtrati.length) {
         html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
@@ -354,7 +323,6 @@ function renderCorsi(el, slide, colTesto) {
         start = Math.max(0, attivoIdx >= 0 ? attivoIdx - 1 : 0);
         const end = Math.min(filtrati.length, start + 5);
         if (end - start < 5) start = Math.max(0, end - 5);
-
         html += `<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:0;">`;
         for (let i = start; i < end; i++) {
             const c = filtrati[i];
@@ -372,7 +340,7 @@ function renderCorsi(el, slide, colTesto) {
     el.innerHTML = html;
 }
 
-// ── RENDER COUNTDOWN CON PRE-EVENTO E AUTO-DISABLE ───────────────
+// ── RENDER COUNTDOWN ─────────────────────────────────────────────
 function renderCountdown(el, slide, cfg, colTesto) {
     const titolo = slide.titolo || 'Prossimo evento';
     const dataTarget = cfg.data_target ? new Date(cfg.data_target) : null;
@@ -380,7 +348,6 @@ function renderCountdown(el, slide, cfg, colTesto) {
     const autoDisable = cfg.auto_disable || 0;
     const slideId = slide.id;
 
-    // Pulisci interval precedente se esiste
     if (countdownIntervals[slideId]) {
         clearInterval(countdownIntervals[slideId]);
         delete countdownIntervals[slideId];
@@ -392,78 +359,44 @@ function renderCountdown(el, slide, cfg, colTesto) {
     function aggiorna() {
         const content = document.getElementById('countdown-content-' + slideId);
         if (!content) {
-            if (countdownIntervals[slideId]) {
-                clearInterval(countdownIntervals[slideId]);
-                delete countdownIntervals[slideId];
+            if (countdownIntervals[slideId]) { clearInterval(countdownIntervals[slideId]); delete countdownIntervals[slideId]; }
+            return;
+        }
+        if (!dataTarget) { content.innerHTML = `<div class="countdown-titolo">Evento configurato</div>`; return; }
+        const diff = dataTarget - new Date();
+        if (diff <= 0) {
+            if (countdownIntervals[slideId]) { clearInterval(countdownIntervals[slideId]); delete countdownIntervals[slideId]; }
+            if (autoDisable) {
+                content.innerHTML = `<div class="countdown-titolo" style="font-size:32px;">✓ Evento in corso</div>`;
+                fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&action=disable_slide&id=' + slideId)
+                    .then(r => r.json())
+                    .then(() => setTimeout(() => aggiornaDaAPI(), 2000))
+                    .catch(() => setTimeout(() => mostraSlide(sidebarIndice + 1), 1000));
+            } else {
+                content.innerHTML = `<div class="countdown-titolo" style="font-size:32px;">Evento in corso!</div>`;
             }
             return;
         }
-        
-        if (!dataTarget) { 
-            content.innerHTML = `<div class="countdown-titolo">Evento configurato</div>`; 
-            return; 
-        }
-        
-        const diff = dataTarget - new Date();
-        
-        if (diff <= 0) { 
-            // Countdown terminato
-            if (countdownIntervals[slideId]) {
-                clearInterval(countdownIntervals[slideId]);
-                delete countdownIntervals[slideId];
-            }
-            
-            if (autoDisable) {
-                // Mostra messaggio finale brevemente
-                content.innerHTML = `<div class="countdown-titolo" style="font-size:32px;animation:fadeIn 0.5s;">✓ Evento in corso</div>`;
-                
-                // Disattiva slide via API
-                fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&action=disable_slide&id=' + slideId)
-                    .then(r => r.json())
-                    .then(data => {
-                        console.log('Slide countdown ' + slideId + ' disattivata automaticamente:', data);
-                        // Aspetta 2 secondi prima di passare alla prossima slide
-                        // Questo evita il flickering
-                        setTimeout(() => {
-                            // Ricarica le slide dal server per escludere quella disattivata
-                            aggiornaDaAPI();
-                        }, 2000);
-                    })
-                    .catch(e => {
-                        console.error('Errore disattivazione slide:', e);
-                        // Anche in caso di errore, passa alla prossima
-                        setTimeout(() => mostraSlide(sidebarIndice + 1), 1000);
-                    });
-            } else {
-                // Se auto-disable è off, mostra solo un messaggio
-                content.innerHTML = `<div class="countdown-titolo" style="font-size:32px;">Evento in corso!</div>`;
-            }
-            return; 
-        }
-
         const giorni = Math.floor(diff / 86400000);
         const ore    = Math.floor((diff % 86400000) / 3600000);
         const minuti = Math.floor((diff % 3600000) / 60000);
         const sec    = Math.floor((diff % 60000) / 1000);
-
         let blocchi = '';
         if (giorni > 0) blocchi += `<div class="countdown-blocco"><div class="countdown-num">${String(giorni).padStart(2,'0')}</div><div class="countdown-label">Giorni</div></div>`;
         blocchi += `
             <div class="countdown-blocco"><div class="countdown-num">${String(ore).padStart(2,'0')}</div><div class="countdown-label">Ore</div></div>
             <div class="countdown-blocco"><div class="countdown-num">${String(minuti).padStart(2,'0')}</div><div class="countdown-label">Min</div></div>
             <div class="countdown-blocco"><div class="countdown-num">${String(sec).padStart(2,'0')}</div><div class="countdown-label">Sec</div></div>`;
-
         content.innerHTML = `
             ${messaggioPre ? `<div class="countdown-pre">${messaggioPre}</div>` : ''}
             <div class="countdown-titolo">${titolo}</div>
             <div class="countdown-numeri">${blocchi}</div>`;
     }
-    
     aggiorna();
     countdownIntervals[slideId] = setInterval(aggiorna, 1000);
 }
 
-// ── RENDER METEO CON PREVISIONI 3 GIORNI ─────────────────────────
+// ── RENDER METEO ─────────────────────────────────────────────────
 const WMO_ICONS = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',71:'❄️',73:'❄️',75:'❄️',80:'🌦️',81:'🌧️',82:'⛈️',95:'⛈️',96:'⛈️',99:'⛈️'};
 const WMO_DESC  = {0:'Sereno',1:'Prevalenz. sereno',2:'Parz. nuvoloso',3:'Nuvoloso',45:'Nebbia',51:'Pioggerella',61:'Pioggia',65:'Pioggia intensa',71:'Neve',80:'Rovesci',95:'Temporale'};
 
@@ -478,15 +411,11 @@ async function fetchMeteo(citta, lat, lon) {
             if (!geoData.results?.length) return null;
             latitude = geoData.results[0].latitude; longitude = geoData.results[0].longitude;
         }
-        // Aggiunto parametri daily per previsioni 3 giorni
         const res  = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weathercode,windspeed_10m,relativehumidity_2m&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4`);
         const data = await res.json();
         meteoCache[key] = { ts: Date.now(), data };
         return data;
-    } catch(e) { 
-        console.error('Errore fetch meteo:', e);
-        return null; 
-    }
+    } catch(e) { return null; }
 }
 
 async function renderMeteo(el, slide, cfg, colTesto) {
@@ -497,11 +426,8 @@ async function renderMeteo(el, slide, cfg, colTesto) {
         el.innerHTML = `<div class="widget-header">${titolo}</div><div class="widget-meteo"><div style="font-size:24px;opacity:0.5;">Dati non disponibili</div></div>`;
         return;
     }
-    
     const cur = data.current;
     const wmo = cur.weathercode;
-    
-    // Previsioni 3 giorni (salta oggi, prendi i prossimi 3)
     let previsioni = '';
     if (data.daily && data.daily.time) {
         const giorni = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
@@ -517,7 +443,6 @@ async function renderMeteo(el, slide, cfg, colTesto) {
             </div>`;
         }
     }
-    
     el.innerHTML = `
         <div class="widget-header">${titolo}</div>
         <div class="widget-meteo">
@@ -572,42 +497,30 @@ function aggiornaOrologio() {
 const STREAM_URL = '<?php echo htmlspecialchars($stream_url); ?>';
 
 async function avviaSegnaleTV() {
-    const streamUrl = STREAM_URL;
-    await avviaSegnaleTVRuntime(streamUrl);
+    await avviaSegnaleTVRuntime(STREAM_URL);
 }
 
 async function avviaSegnaleTVRuntime(streamUrl) {
     const v = document.getElementById('tv-video');
-
     if (streamUrl) {
-        // Modalità streaming HLS
         document.getElementById('tv-placeholder').style.display = 'none';
         if (streamUrl.includes('.m3u8')) {
-            // Stream HLS
             if (Hls.isSupported()) {
                 const hls = new Hls({ autoStartLoad: true, startLevel: -1 });
                 hls.loadSource(streamUrl);
                 hls.attachMedia(v);
                 hls.on(Hls.Events.MANIFEST_PARSED, () => v.play().catch(() => {}));
                 hls.on(Hls.Events.ERROR, (e, data) => {
-                    if (data.fatal) {
-                        setTimeout(() => { hls.loadSource(streamUrl); }, 5000);
-                    }
+                    if (data.fatal) setTimeout(() => { hls.loadSource(streamUrl); }, 5000);
                 });
             } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
-                // Safari nativo
-                v.src = streamUrl;
-                v.play().catch(() => {});
+                v.src = streamUrl; v.play().catch(() => {});
             }
         } else {
-            // URL diretto (mp4, webm)
-            v.src = streamUrl;
-            v.play().catch(() => {});
+            v.src = streamUrl; v.play().catch(() => {});
         }
         return;
     }
-
-    // Modalità webcam / segnale TV via cavo
     try {
         await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -623,7 +536,7 @@ async function avviaSegnaleTVRuntime(streamUrl) {
     }
 }
 
-// ── BANNER CON DIMENSIONI GRANULARI ──────────────────────────────
+// ── BANNER ───────────────────────────────────────────────────────
 function applicaBanner(banner) {
     const el      = document.getElementById('layer-banner');
     const altezza = parseInt(banner.banner_altezza) || 80;
@@ -631,17 +544,17 @@ function applicaBanner(banner) {
     const logoSize = parseInt(banner.logo_size) || 75;
     const dataSize = parseInt(banner.data_size) || 28;
     const oraSize  = parseInt(banner.ora_size) || 44;
-    
+
     bannerColore      = banner.banner_colore       || '#000000';
     bannerTestoColore = banner.banner_testo_colore || '#ffffff';
-    
+
     el.style.height  = altezza + 'px';
     el.style.padding = '0 ' + Math.round(altezza * 0.25) + 'px';
     el.style.gap     = Math.round(altezza * 0.25) + 'px';
 
-    const mainEl    = document.getElementById('main');
-    const sideEl    = document.getElementById('colonna-corsi');
-    const altMain   = 1080 - altezza;
+    const mainEl  = document.getElementById('main');
+    const sideEl  = document.getElementById('colonna-corsi');
+    const altMain = 1080 - altezza;
 
     if (pos === 'top') {
         el.style.top = '0'; el.style.bottom = 'auto';
@@ -651,23 +564,13 @@ function applicaBanner(banner) {
         mainEl.style.top = '0'; mainEl.style.height = altMain + 'px';
     }
 
-    // Sidebar dinamica: la TV deve rimanere 16:9
     if (sideEl) {
         const tvWidth      = Math.round(altMain * 16 / 9);
         const sidebarWidth = 1920 - tvWidth;
         sideEl.style.width = sidebarWidth + 'px';
     }
 
-    // Aggiorna layer-adv
-    const advEl = document.getElementById('layer-adv');
-    if (advEl) {
-        if (pos === 'top') {
-            advEl.style.top = altezza + 'px'; advEl.style.bottom = '0';
-        } else {
-            advEl.style.top = '0'; advEl.style.bottom = altezza + 'px';
-        }
-        advEl.style.height = altMain + 'px';
-    }
+    // NON aggiornare layer-adv qui — viene gestito da mostraADV/mostraTV
 
     const logo = document.getElementById('banner-logo');
     if (banner.logo) {
@@ -675,11 +578,10 @@ function applicaBanner(banner) {
         logo.style.display = 'block';
         logo.style.height  = Math.round(altezza * (logoSize / 100)) + 'px';
         logo.style.width   = 'auto';
-    } else { 
-        logo.style.display = 'none'; 
+    } else {
+        logo.style.display = 'none';
     }
 
-    // Applica dimensioni granulari
     document.getElementById('banner-ora-dx').style.fontSize      = Math.round(altezza * (oraSize / 100)) + 'px';
     document.getElementById('banner-data-centro').style.fontSize = Math.round(altezza * (dataSize / 100)) + 'px';
 
@@ -699,24 +601,32 @@ function applicaBanner(banner) {
 // ── MODALITÀ TV ──────────────────────────────────────────────────
 function mostraTV() {
     modalitaAttuale = 'tv';
+
+    // Nascondi ADV
     document.getElementById('layer-adv').style.display = 'none';
-    document.getElementById('main').style.display      = 'flex';
+
+    // Mostra main
+    document.getElementById('main').style.display = 'flex';
+
+    // Ripristina banner
     const banner = document.getElementById('layer-banner');
     banner.style.backgroundColor = bannerColore;
     document.getElementById('banner-logo-wrap').style.visibility   = 'visible';
     document.getElementById('banner-data-centro').style.visibility = 'visible';
     document.getElementById('banner-data-centro').style.color      = bannerTestoColore;
     document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'visible');
+
     const ora = document.getElementById('banner-ora-dx');
     ora.style.opacity = '1'; ora.style.color = bannerTestoColore;
     ora.style.textShadow = ''; ora.style.backgroundColor = '';
     ora.style.borderRadius = ''; ora.style.padding = '';
+
     const video = document.getElementById('adv-video');
     video.pause(); video.src = '';
     if (advTimer) { clearTimeout(advTimer); advTimer = null; }
 }
 
-// ── MODALITÀ ADV CON ORARIO SOVRIMPRESSIONE GRANULARE ────────────
+// ── MODALITÀ ADV ─────────────────────────────────────────────────
 function mostraADV(stato) {
     modalitaAttuale = 'adv';
     contenuti = [...(stato.contenuti || [])];
@@ -725,27 +635,38 @@ function mostraADV(stato) {
         const idx = contenuti.findIndex(c => c.id === stato.contenuto_ora.id);
         if (idx >= 0) indiceContenuto = idx;
     }
-    document.getElementById('main').style.display      = 'none';
-    document.getElementById('layer-adv').style.display = 'block';
+
+    // Nascondi main (TV + sidebar)
+    document.getElementById('main').style.display = 'none';
+
+    // Layer ADV a TUTTO SCHERMO 1920x1080
+    const advEl = document.getElementById('layer-adv');
+    advEl.style.top     = '0';
+    advEl.style.height  = '1080px';
+    advEl.style.display = 'block';
+    document.getElementById('adv-video').style.height    = '1080px';
+    document.getElementById('adv-immagine').style.height = '1080px';
+
+    // Banner trasparente — solo orologio visibile (z-index 30 > adv z-index 20)
     const banner = document.getElementById('layer-banner');
     banner.style.backgroundColor = 'transparent';
     document.getElementById('banner-logo-wrap').style.visibility   = 'hidden';
     document.getElementById('banner-data-centro').style.visibility = 'hidden';
     document.querySelectorAll('.banner-sep').forEach(s => s.style.visibility = 'hidden');
-    
+
+    // Orologio in sovrimpressione
     const ora = document.getElementById('banner-ora-dx');
-    ora.style.opacity = '1'; 
-    ora.style.color = '#ffffff';
-    ora.style.textShadow = '0 0 8px rgba(0,0,0,0.9)';
+    ora.style.opacity         = '1';
+    ora.style.color           = '#ffffff';
+    ora.style.textShadow      = '0 0 8px rgba(0,0,0,0.9)';
     ora.style.backgroundColor = 'rgba(0,0,0,0.5)';
-    ora.style.borderRadius = '6px'; 
-    ora.style.padding = '4px 14px';
-    
-    // Applica dimensione orario granulare anche in sovrimpressione
+    ora.style.borderRadius    = '6px';
+    ora.style.padding         = '4px 14px';
+
     const oraSize = parseInt(stato.banner?.ora_size) || 44;
     const bannerH = parseInt(stato.banner?.banner_altezza) || 80;
     ora.style.fontSize = Math.round(bannerH * (oraSize / 100)) + 'px';
-    
+
     mostraContenuto(indiceContenuto);
 }
 
@@ -755,7 +676,6 @@ function mostraContenuto(idx) {
     idx = idx % contenuti.length; indiceContenuto = idx;
     const c = contenuti[idx];
 
-    // Log passaggio ADV
     const durata = c.tipo === 'video' ? 30 : (c.durata || 10);
     fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&log_contenuto=' + c.id + '&log_durata=' + durata)
         .catch(() => {});
@@ -763,6 +683,7 @@ function mostraContenuto(idx) {
     const video    = document.getElementById('adv-video');
     const immagine = document.getElementById('adv-immagine');
     const url = BASE_URL + 'uploads/' + c.file;
+
     if (c.tipo === 'video') {
         immagine.style.display = 'none'; video.style.display = 'block';
         video.muted = true; video.volume = 0; video.defaultMuted = true;
@@ -801,9 +722,8 @@ async function caricaCorsi() {
             return (parseInt(p[0]) * 60 + parseInt(p[1]) + c.durata) > oraOra;
         }).sort((a, b) => a.orario.localeCompare(b.orario));
         setTimeout(caricaCorsi, 3600000);
-    } catch(e) { 
-        console.error('Errore caricamento corsi:', e);
-        setTimeout(caricaCorsi, 60000); 
+    } catch(e) {
+        setTimeout(caricaCorsi, 60000);
     }
 }
 
@@ -815,67 +735,32 @@ async function aggiornaDaAPI() {
         const res   = await fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&t=' + Date.now());
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const stato = await res.json();
-        
-        console.log('📡 Polling API - stato ricevuto:', stato);
-        
-        if (stato.errore) { 
-            console.error('❌ Errore API:', stato.errore);
-            setTimeout(aggiornaDaAPI, 15000); 
-            return; 
-        }
-        
+
+        if (stato.errore) { setTimeout(aggiornaDaAPI, 15000); return; }
+
         if (stato.banner) applicaBanner(stato.banner);
 
-        // FORZA SEMPRE IL CONTROLLO SLIDE
         const slideRicevute = stato.sidebar_slides || [];
         const nuove = JSON.stringify(slideRicevute);
-        
-        console.log('🔍 Slide ricevute:', slideRicevute.length, 'slide');
-        console.log('🔍 Slide attuali in memoria:', sidebarSlides.length, 'slide');
-        console.log('🔍 Hash vecchio:', slidesSerializ.substring(0, 50) + '...');
-        console.log('🔍 Hash nuovo:', nuove.substring(0, 50) + '...');
-        
         if (nuove !== slidesSerializ) {
-            console.log('🔄 CAMBIAMENTO RILEVATO - Aggiorno sidebar');
             slidesSerializ = nuove;
-            
-            // Ferma timer e interval countdown
-            if (sidebarTimer) {
-                clearTimeout(sidebarTimer);
-                console.log('⏹ Timer sidebar fermato');
-            }
+            if (sidebarTimer) clearTimeout(sidebarTimer);
             Object.keys(countdownIntervals).forEach(id => {
-                clearInterval(countdownIntervals[id]);
-                delete countdownIntervals[id];
-                console.log('⏹ Countdown interval ' + id + ' fermato');
+                clearInterval(countdownIntervals[id]); delete countdownIntervals[id];
             });
-            
-            // Riavvia sidebar con nuove slide
-            console.log('▶️ Riavvio carousel con', slideRicevute.length, 'slide');
             avviaSidebar(slideRicevute);
-        } else {
-            console.log('✅ Nessun cambiamento nelle slide');
         }
 
         const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
         const streamCambiato = statoCorrente && statoCorrente.stream_url !== stato.stream_url;
-        
+
         if (stato.modalita === 'tv') {
             if (cambiata || streamCambiato) {
-                console.log('🔄 Cambio sorgente TV:', streamCambiato ? 'stream modificato' : 'modalità cambiata');
                 mostraTV();
-                // Ricarica il video con nuovo stream
                 if (streamCambiato || !statoCorrente) {
                     const v = document.getElementById('tv-video');
-                    v.pause();
-                    v.src = '';
-                    v.srcObject = null;
-                    // Aspetta un po' prima di ricaricare per evitare conflitti
-                    setTimeout(() => {
-                        // Aggiorna la costante STREAM_URL (solo per compatibilità)
-                        window.STREAM_URL_RUNTIME = stato.stream_url || '';
-                        avviaSegnaleTVRuntime(stato.stream_url || '');
-                    }, 500);
+                    v.pause(); v.src = ''; v.srcObject = null;
+                    setTimeout(() => avviaSegnaleTVRuntime(stato.stream_url || ''), 500);
                 }
             }
             setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
@@ -884,9 +769,8 @@ async function aggiornaDaAPI() {
             setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_tv || 60) * 1000, 30000));
         }
         statoCorrente = stato;
-    } catch(e) { 
-        console.error('❌ Errore polling API:', e);
-        setTimeout(aggiornaDaAPI, 15000); 
+    } catch(e) {
+        setTimeout(aggiornaDaAPI, 15000);
     }
 }
 
