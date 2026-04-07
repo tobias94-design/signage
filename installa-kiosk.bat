@@ -20,7 +20,7 @@ echo  PixelBridge Kiosk - Installazione
 echo  ====================================
 echo.
 
-:: ── TROVA AGENT.PY ──────────────────────────────────────────
+:: ── VERIFICA AGENT.PY ───────────────────────────────────────────
 if not exist "%~dp0agent.py" (
     echo  ERRORE: agent.py non trovato in %~dp0
     echo  Assicurati che installa-kiosk.bat sia nella cartella PixelBridge.
@@ -30,7 +30,7 @@ if not exist "%~dp0agent.py" (
 )
 echo  [OK] agent.py trovato
 
-:: ── TROVA PYTHON ────────────────────────────────────────────
+:: ── VERIFICA PYTHON ─────────────────────────────────────────────
 python --version > nul 2>&1
 if %errorlevel% neq 0 (
     echo  ERRORE: Python non installato!
@@ -41,7 +41,28 @@ if %errorlevel% neq 0 (
 )
 echo  [OK] Python trovato
 
-:: ── TASK SCHEDULER ──────────────────────────────────────────
+:: ── TROVA CHROME ────────────────────────────────────────────────
+set "CHROME="
+if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
+    set "CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
+)
+if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" (
+    set "CHROME=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
+)
+if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" (
+    set "CHROME=%LocalAppData%\Google\Chrome\Application\chrome.exe"
+)
+
+if "!CHROME!"=="" (
+    echo  ERRORE: Google Chrome non trovato!
+    echo  Installalo da https://google.com/chrome
+    echo.
+    pause
+    exit /b 1
+)
+echo  [OK] Chrome trovato: !CHROME!
+
+:: ── TASK SCHEDULER ──────────────────────────────────────────────
 echo.
 echo  Configurazione avvio automatico...
 
@@ -102,7 +123,7 @@ if %errorlevel% equ 0 (
 )
 del "%XML_PATH%" > nul 2>&1
 
-:: ── AUTO-LOGIN ──────────────────────────────────────────────
+:: ── AUTO-LOGIN ──────────────────────────────────────────────────
 echo.
 echo  Per far partire il display dopo un blackout il PC
 echo  deve loggarsi in automatico senza cliccare nulla.
@@ -118,7 +139,7 @@ if /i "!AUTOLOGIN!"=="s" (
     echo  [OK] Auto-login configurato per: %USERNAME%
 )
 
-:: ── IMPOSTAZIONI KIOSK ──────────────────────────────────────
+:: ── IMPOSTAZIONI KIOSK ──────────────────────────────────────────
 echo.
 echo  Impostazioni kiosk Windows...
 
@@ -147,18 +168,46 @@ echo  [OK] Dialog di errore disabilitati
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\OneDrive" /v DisableFileSyncNGSC /t REG_DWORD /d 1 /f > nul 2>&1
 echo  [OK] OneDrive disabilitato
 
-:: ── FINE ────────────────────────────────────────────────────
+:: ── PRE-AUTORIZZAZIONE FOTOCAMERA ───────────────────────────────
+echo.
+echo  ============================================
+echo   AUTORIZZAZIONE FOTOCAMERA / CAPTURE CARD
+echo  ============================================
+echo.
+echo  Ora si apre Chrome con il profilo kiosk.
+echo  Quando appare il popup "Consenti fotocamera":
+echo.
+echo    1. Clicca "Consenti"
+echo    2. Chiudi Chrome
+echo.
+echo  Questo serve UNA SOLA VOLTA per autorizzare
+echo  la capture card HDMI in modalita kiosk.
+echo.
+pause
+
+:: Apri Chrome con il profilo kiosk e il flag per HTTP sicuro
+:: Apre la pagina di test camera di Chrome (non richiede server)
+start "" "!CHROME!" ^
+    --user-data-dir="%~dp0chrome-profile" ^
+    --unsafely-treat-insecure-origin-as-secure=http://204.168.161.116 ^
+    --allow-http-screen-capture ^
+    "http://204.168.161.116/player/display.php"
+
+echo.
+echo  Chrome e' aperto. Autorizza la fotocamera e chiudi Chrome.
+echo.
+pause
+
+:: ── FINE ────────────────────────────────────────────────────────
 echo.
 echo  ====================================
 echo   INSTALLAZIONE COMPLETATA!
 echo  ====================================
 echo.
-echo  Prossimi passi:
+echo  Cosa fare ora:
 echo  1. Riavvia il PC
-echo  2. Al riavvio si apre automaticamente la schermata
-echo     di pairing di PixelBridge
-echo  3. Inserisci il codice nel pannello web
-echo  4. Da quel momento funziona per sempre in automatico
+echo  2. Al riavvio parte automaticamente il display
+echo  3. La capture card HDMI e' gia' autorizzata
 echo.
 echo  BIOS: imposta "Power On After Power Loss" = Power On
 echo  per il riavvio automatico dopo blackout.
