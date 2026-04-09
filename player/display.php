@@ -58,9 +58,9 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
         .widget-countdown { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; }
         .countdown-pre { font-size: 18px; opacity: 0.75; text-align: center; margin-bottom: 8px; font-weight: 300; }
         .countdown-titolo { font-size: 28px; font-weight: bold; text-align: center; line-height: 1.3; }
-        .countdown-numeri { display: flex; gap: 16px; justify-content: center; margin-top: 10px; }
-        .countdown-blocco { text-align: center; }
-        .countdown-num { font-size: 64px; font-weight: 900; line-height: 1; letter-spacing: -2px; }
+        .countdown-numeri { display: flex; gap: 8px; justify-content: center; margin-top: 10px; width: 100%; overflow: hidden; }
+        .countdown-blocco { text-align: center; min-width: 0; flex: 1; }
+        .countdown-num { font-size: 48px; font-weight: 900; line-height: 1; letter-spacing: -2px; }
         .countdown-label { font-size: 14px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.6; margin-top: 4px; }
         .widget-meteo { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; }
         .meteo-icona { font-size: 80px; line-height: 1; }
