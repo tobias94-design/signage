@@ -570,25 +570,27 @@ function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
     idx = idx % contenuti.length; indiceContenuto = idx;
     const c = contenuti[idx];
-    const durata = c.tipo === 'video' ? 30 : (c.durata || 10);
+    const durata = c.tipo === 'video' ? (c.durata || 30) : (c.durata || 10);
     fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&log_contenuto=' + c.id + '&log_durata=' + durata).catch(() => {});
     const video    = document.getElementById('adv-video');
     const immagine = document.getElementById('adv-immagine');
     const url = BASE_URL + 'uploads/' + c.file;
+    const currentIdx = idx;
     if (c.tipo === 'video') {
         immagine.style.display = 'none'; video.style.display = 'block';
         video.muted = true; video.volume = 0; video.defaultMuted = true;
         video.setAttribute('muted', '');
+        video.onended = null;
         video.src = url; video.load();
         video.addEventListener('canplay', function h() {
             video.removeEventListener('canplay', h); video.play().catch(() => {});
         });
-        video.onended = () => mostraContenuto(indiceContenuto + 1);
+        video.onended = () => mostraContenuto(currentIdx + 1);
     } else {
         video.pause(); video.src = ''; video.style.display = 'none';
         immagine.style.display = 'block'; immagine.src = url;
         if (advTimer) clearTimeout(advTimer);
-        advTimer = setTimeout(() => mostraContenuto(indiceContenuto + 1), (c.durata||10) * 1000);
+        advTimer = setTimeout(() => mostraContenuto(currentIdx + 1), (c.durata||10) * 1000);
     }
 }
 
@@ -651,8 +653,7 @@ async function aggiornaDaAPI() {
             }
         }
 
-        const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita || 
-                 (stato.modalita === 'tv' && statoCorrente.stream_url !== stato.stream_url);
+        const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
         const streamCambiato = statoCorrente && statoCorrente.stream_url !== stato.stream_url;
 
         if (stato.modalita === 'tv') {
