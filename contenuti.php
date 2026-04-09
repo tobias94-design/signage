@@ -15,7 +15,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
 
     if (in_array($estensione, $tipi_video)) {
         $tipo   = 'video';
-        $durata = 0; // i video durano fino a onended
+        // Legge la durata reale inviata dal browser via JavaScript
+        $durata = intval($_POST['durata_video']) ?: 30;
     } elseif (in_array($estensione, $tipi_immagine)) {
         $tipo   = 'immagine';
         $durata = intval($_POST['durata']) ?: 10;
@@ -154,8 +155,28 @@ document.getElementById('fileInput').addEventListener('change', function() {
     const campo  = document.getElementById('campo-durata');
     if (!file) return;
     const ext    = file.name.split('.').pop().toLowerCase();
-    const video  = ['mp4', 'webm'].includes(ext);
-    campo.style.display = video ? 'none' : 'block';
+    const isVideo = ['mp4', 'webm'].includes(ext);
+    campo.style.display = isVideo ? 'none' : 'block';
+
+    if (isVideo) {
+        // Leggi durata reale del video
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.onloadedmetadata = function() {
+            URL.revokeObjectURL(video.src);
+            // Aggiungi campo nascosto con la durata
+            let hidden = document.getElementById('durata_video_hidden');
+            if (!hidden) {
+                hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'durata_video';
+                hidden.id = 'durata_video_hidden';
+                document.querySelector('form').appendChild(hidden);
+            }
+            hidden.value = Math.ceil(video.duration);
+        };
+        video.src = URL.createObjectURL(file);
+    }
 });
 </script>
 

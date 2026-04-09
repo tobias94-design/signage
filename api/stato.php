@@ -147,7 +147,7 @@ if (empty($contenuti_tutti)) {
 // SCHEDULING
 $DURATA_VIDEO_DEFAULT = 30;
 $getDurata = function($c) use ($DURATA_VIDEO_DEFAULT) {
-    return $c['tipo'] === 'video' ? $DURATA_VIDEO_DEFAULT : (int)$c['durata'];
+    return $c['tipo'] === 'video' ? ((int)$c['durata'] ?: $DURATA_VIDEO_DEFAULT) : (int)$c['durata'];
 };
 
 $durata_playlist = array_sum(array_map($getDurata, $contenuti_tutti));
