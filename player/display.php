@@ -634,6 +634,9 @@ async function aggiornaDaAPI() {
 
         if (stato.errore) { setTimeout(aggiornaDaAPI, 15000); return; }
 
+        // Reload remoto richiesto dal pannello admin
+        if (stato.reload) { location.reload(); return; }
+
         if (stato.banner) applicaBanner(stato.banner);
 
         // Confronta solo id+tipo+attivo — evita restart per campi irrilevanti
