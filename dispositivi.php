@@ -26,6 +26,7 @@ try { $db->exec("ALTER TABLE dispositivi ADD COLUMN note TEXT DEFAULT ''"); } ca
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN lat REAL DEFAULT NULL"); } catch(Exception $e) {}
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN tipo_display TEXT DEFAULT 'tv'"); } catch(Exception $e) {}
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN lon REAL DEFAULT NULL"); } catch(Exception $e) {}
+try { $db->exec("ALTER TABLE dispositivi ADD COLUMN reload_richiesto INTEGER DEFAULT 0"); } catch(Exception $e) {}
 try { $db->exec("CREATE TABLE IF NOT EXISTS pairing_pending (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     code TEXT UNIQUE NOT NULL,
@@ -97,6 +98,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tok    = $_POST['token'] ?? '';
         $layout = $_POST['layout'] ?? 'standard';
         $db->prepare("UPDATE dispositivi SET layout=? WHERE token=?")->execute([$layout, $tok]);
+        header('Location: dispositivi.php'); exit;
+    }
+
+    if ($action === 'reload_display') {
+        $tok = $_POST['token'] ?? '';
+        $db->prepare("UPDATE dispositivi SET reload_richiesto=1 WHERE token=?")->execute([$tok]);
         header('Location: dispositivi.php'); exit;
     }
 }
@@ -211,6 +218,11 @@ require_once __DIR__ . '/includes/header.php';
             <td style="padding:12px 16px;">
                 <div style="display:flex;gap:6px;align-items:center;">
                     <a href="<?= $playerUrl ?>" target="_blank" class="btn btn-sm btn-success" style="font-size:11px;padding:3px 8px;">▶</a>
+<form method="POST" style="margin:0;">
+    <input type="hidden" name="action" value="reload_display">
+    <input type="hidden" name="token" value="<?= $d['token'] ?>">
+    <button type="submit" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;" title="Ricarica display">🔄</button>
+</form>
                     <a href="dispositivi.php?view=modifica&token=<?= $d['token'] ?>" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;">✏️</a>
                     <form method="POST" onsubmit="return confirm('Eliminare?')" style="margin:0;">
                         <input type="hidden" name="action" value="elimina">

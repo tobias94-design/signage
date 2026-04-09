@@ -5,40 +5,21 @@ header('Access-Control-Allow-Origin: *');
 require_once __DIR__ . '/../includes/db.php';
 $db = getDB();
 
-// ═══════════════════════════════════════════════════════════════
 // ── AUTO-DISABLE SLIDE COUNTDOWN ──────────────────────────────
-// ═══════════════════════════════════════════════════════════════
 if (isset($_GET['action']) && $_GET['action'] === 'disable_slide') {
     $slideId = (int)($_GET['id'] ?? 0);
-    
     if ($slideId > 0) {
         try {
-            $stmt = $db->prepare('UPDATE sidebar_slides SET attivo=0 WHERE id=?');
-            $stmt->execute([$slideId]);
-            
-            // Log dell'operazione
-            error_log("Slide countdown {$slideId} disattivata automaticamente");
-            
-            echo json_encode([
-                'success' => true, 
-                'message' => 'Slide disattivata automaticamente',
-                'slide_id' => $slideId
-            ]);
+            $db->prepare('UPDATE sidebar_slides SET attivo=0 WHERE id=?')->execute([$slideId]);
+            echo json_encode(['success' => true, 'message' => 'Slide disattivata', 'slide_id' => $slideId]);
         } catch (Exception $e) {
-            echo json_encode([
-                'success' => false, 
-                'message' => 'Errore database: ' . $e->getMessage()
-            ]);
+            echo json_encode(['success' => false, 'message' => 'Errore: ' . $e->getMessage()]);
         }
     } else {
-        echo json_encode([
-            'success' => false, 
-            'message' => 'ID slide non valido'
-        ]);
+        echo json_encode(['success' => false, 'message' => 'ID non valido']);
     }
     exit;
 }
-// ═══════════════════════════════════════════════════════════════
 
 $token = $_GET['token'] ?? '';
 if (!$token) { echo json_encode(['errore' => 'Token mancante']); exit; }
@@ -54,11 +35,20 @@ if (!$dispositivo) { echo json_encode(['errore' => 'Dispositivo non trovato']); 
 $db->prepare('UPDATE dispositivi SET stato = ?, ultimo_ping = CURRENT_TIMESTAMP WHERE token = ?')
    ->execute(['online', $token]);
 
-// ── LOG PASSAGGIO ADV (se il player segnala un contenuto in corso) ──
+// ── RELOAD FLAG — leggi e resetta ──────────────────────────────
+$reload = false;
+try {
+    $reload = (bool)$db->query("SELECT reload_richiesto FROM dispositivi WHERE token=" . $db->quote($token))->fetchColumn();
+    if ($reload) {
+        $db->prepare("UPDATE dispositivi SET reload_richiesto=0 WHERE token=?")->execute([$token]);
+    }
+} catch(Exception $e) {}
+
+// ── LOG PASSAGGIO ADV ──────────────────────────────────────────
 if (!empty($_GET['log_contenuto'])) {
-    $cid    = (int)$_GET['log_contenuto'];
-    $dur    = (int)($_GET['log_durata'] ?? 0);
-    $club   = $dispositivo['club'] ?? '';
+    $cid  = (int)$_GET['log_contenuto'];
+    $dur  = (int)($_GET['log_durata'] ?? 0);
+    $club = $dispositivo['club'] ?? '';
     try {
         $db->prepare('INSERT INTO log_adv (contenuto_id, dispositivo_token, club, durata_sec) VALUES (?,?,?,?)')
            ->execute([$cid, $token, $club, $dur]);
@@ -66,7 +56,7 @@ if (!empty($_GET['log_contenuto'])) {
 }
 
 if (!$dispositivo['profilo_id']) {
-    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db), 'sidebar_slides' => []];
+    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'banner' => getBanner($db), 'sidebar_slides' => []];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
 }
@@ -103,7 +93,7 @@ try {
 }
 
 if (!$regola_base) {
-    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
+    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
                  'sidebar_slides' => getSidebarSlides($db, $profilo['id'], $token)];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
@@ -118,7 +108,6 @@ try {
         JOIN playlist p ON p.id = pe.playlist_id
         WHERE pe.profilo_id = " . intval($profilo['id'])
     )->fetchAll(PDO::FETCH_ASSOC);
-
     foreach ($eventi as $ev) {
         if (!empty($ev['data_fine'])   && $ev['data_fine']   < $oggi) continue;
         if (!empty($ev['data_inizio']) && $ev['data_inizio'] > $oggi) continue;
@@ -132,13 +121,13 @@ try {
     }
 } catch(Exception $e) { $evento_attivo = null; }
 
-// CARICA E CONCATENA CONTENUTI
+// CONTENUTI
 $contenuti_base   = getContenutiPlaylist($db, $regola_base['playlist_id'], $oggi);
 $contenuti_evento = $evento_attivo ? getContenutiPlaylist($db, $evento_attivo['playlist_id'], $oggi) : [];
 $contenuti_tutti  = array_values(array_merge($contenuti_base, $contenuti_evento));
 
 if (empty($contenuti_tutti)) {
-    $risposta = ['modalita' => 'tv', 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
+    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
                  'sidebar_slides' => getSidebarSlides($db, $profilo['id'], $token)];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
@@ -162,6 +151,7 @@ if ($posizione_ciclo < $intervallo_sec) {
     $secondi_alla_adv = $intervallo_sec - $posizione_ciclo;
     $risposta = [
         'modalita'         => 'tv',
+        'reload'           => $reload,
         'secondi_alla_adv' => $secondi_alla_adv,
         'banner'           => getBanner($db, $profilo),
         'profilo'          => $profilo['nome'],
@@ -173,7 +163,6 @@ if ($posizione_ciclo < $intervallo_sec) {
 } else {
     $pos_in_adv      = $posizione_ciclo - $intervallo_sec;
     $secondi_alla_tv = $durata_playlist - $pos_in_adv;
-
     $contenuto_attivo = null;
     $elapsed = 0;
     foreach ($contenuti_tutti as $c) {
@@ -185,9 +174,9 @@ if ($posizione_ciclo < $intervallo_sec) {
         }
         $elapsed += $dur;
     }
-
     $risposta = [
         'modalita'        => 'adv',
+        'reload'          => $reload,
         'playlist_nome'   => $regola_base['playlist_nome'] . ($evento_attivo ? ' + ' . $evento_attivo['nome'] : ''),
         'contenuti'       => $contenuti_tutti,
         'contenuto_ora'   => $contenuto_attivo,
@@ -197,7 +186,7 @@ if ($posizione_ciclo < $intervallo_sec) {
         'profilo'         => $profilo['nome'],
         'evento_attivo'   => $evento_attivo ? $evento_attivo['nome'] : null,
         'sidebar_slides'  => getSidebarSlides($db, $profilo['id'], $token),
-        'debug'           => "ADV per altri {$secondi_alla_tv}s" . ($evento_attivo ? " [evento: {$evento_attivo['nome']}]" : '')
+        'debug'           => "ADV per altri {$secondi_alla_tv}s"
     ];
 }
 
@@ -206,24 +195,12 @@ echo json_encode($risposta);
 
 function getSidebarSlides($db, $profilo_id, $token = '') {
     try {
-        // Prima cerca per dispositivo_token (nuovo sistema)
         if ($token) {
-            $slides = $db->query("
-                SELECT * FROM sidebar_slides
-                WHERE dispositivo_token = " . $db->quote($token) . "
-                AND attivo = 1
-                ORDER BY ordine
-            ")->fetchAll(PDO::FETCH_ASSOC);
+            $slides = $db->query("SELECT * FROM sidebar_slides WHERE dispositivo_token = " . $db->quote($token) . " AND attivo = 1 ORDER BY ordine")->fetchAll(PDO::FETCH_ASSOC);
             if (!empty($slides)) return $slides;
         }
-        // Fallback: vecchio sistema per profilo_id
         if ($profilo_id) {
-            return $db->query("
-                SELECT * FROM sidebar_slides
-                WHERE profilo_id = " . intval($profilo_id) . "
-                AND attivo = 1
-                ORDER BY ordine
-            ")->fetchAll(PDO::FETCH_ASSOC);
+            return $db->query("SELECT * FROM sidebar_slides WHERE profilo_id = " . intval($profilo_id) . " AND attivo = 1 ORDER BY ordine")->fetchAll(PDO::FETCH_ASSOC);
         }
         return [];
     } catch(Exception $e) { return []; }
@@ -237,27 +214,15 @@ function getContenutiPlaylist($db, $playlist_id, $oggi) {
         WHERE pi.playlist_id = " . intval($playlist_id) . "
         ORDER BY pi.ordine
     ")->fetchAll(PDO::FETCH_ASSOC);
-
     return array_values(array_filter($rows, function($c) use ($oggi, $db) {
-        // Scadenza playlist item
         if (!empty($c['data_fine'])   && $c['data_fine']   < $oggi) return false;
         if (!empty($c['data_inizio']) && $c['data_inizio'] > $oggi) return false;
-
-        // Se il contenuto ha un inserzionista, verifica che sia attivo e con contratto valido
         if (!empty($c['inserzionista_id'])) {
             $ins = $db->query("SELECT attivo FROM inserzionisti WHERE id=" . intval($c['inserzionista_id']))->fetch();
             if (!$ins || !$ins['attivo']) return false;
-
-            $contratto_ok = $db->query("
-                SELECT COUNT(*) FROM contratti
-                WHERE inserzionista_id = " . intval($c['inserzionista_id']) . "
-                AND stato = 'attivo'
-                AND data_inizio <= '$oggi'
-                AND data_fine   >= '$oggi'
-            ")->fetchColumn();
+            $contratto_ok = $db->query("SELECT COUNT(*) FROM contratti WHERE inserzionista_id = " . intval($c['inserzionista_id']) . " AND stato = 'attivo' AND data_inizio <= '$oggi' AND data_fine >= '$oggi'")->fetchColumn();
             if (!$contratto_ok) return false;
         }
-
         return true;
     }));
 }
@@ -271,7 +236,6 @@ function getBanner($db, $profilo = null) {
         'banner_posizione'    => $profilo['banner_posizione']    ?? 'bottom',
         'banner_altezza'      => $profilo['banner_altezza']      ?? 80,
         'logo'                => $profilo['logo']                ?? '',
-        // ── NUOVI CAMPI DIMENSIONI GRANULARI ──
         'logo_size'           => $profilo['logo_size']           ?? 75,
         'data_size'           => $profilo['data_size']           ?? 28,
         'ora_size'            => $profilo['ora_size']            ?? 44,
