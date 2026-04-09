@@ -651,7 +651,8 @@ async function aggiornaDaAPI() {
             }
         }
 
-        const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
+        const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita || 
+                 (stato.modalita === 'tv' && statoCorrente.stream_url !== stato.stream_url);
         const streamCambiato = statoCorrente && statoCorrente.stream_url !== stato.stream_url;
 
         if (stato.modalita === 'tv') {
