@@ -65,7 +65,7 @@ require_once 'includes/header.php';
 
     <div class="box">
         <h2>Carica nuovo contenuto</h2>
-        <form method="POST" enctype="multipart/form-data">
+        <form method="POST" enctype="multipart/form-data" onsubmit="return checkDurata()">
             <div class="form-grid">
                 <div>
                     <label>Nome contenuto</label>
@@ -150,6 +150,21 @@ require_once 'includes/header.php';
 </style>
 
 <script>
+function checkDurata() {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    if (!file) return true;
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (['mp4', 'webm'].includes(ext)) {
+        const hidden = document.getElementById('durata_video_hidden');
+        if (!hidden || !hidden.value || hidden.value === '0') {
+            alert('Attendi che il video venga analizzato prima di inviare.');
+            return false;
+        }
+    }
+    return true;
+}
+
 document.getElementById('fileInput').addEventListener('change', function() {
     const file   = this.files[0];
     const campo  = document.getElementById('campo-durata');
@@ -159,12 +174,10 @@ document.getElementById('fileInput').addEventListener('change', function() {
     campo.style.display = isVideo ? 'none' : 'block';
 
     if (isVideo) {
-        // Leggi durata reale del video
         const video = document.createElement('video');
         video.preload = 'metadata';
         video.onloadedmetadata = function() {
             URL.revokeObjectURL(video.src);
-            // Aggiungi campo nascosto con la durata
             let hidden = document.getElementById('durata_video_hidden');
             if (!hidden) {
                 hidden = document.createElement('input');
@@ -174,6 +187,7 @@ document.getElementById('fileInput').addEventListener('change', function() {
                 document.querySelector('form').appendChild(hidden);
             }
             hidden.value = Math.ceil(video.duration);
+            console.log('Durata video rilevata:', hidden.value, 'secondi');
         };
         video.src = URL.createObjectURL(file);
     }
