@@ -125,7 +125,7 @@ require_once 'includes/header.php';
         <?php if ($playlist_attiva):
             $pl_corrente   = array_values(array_filter($playlists, fn($p) => $p['id'] == $playlist_attiva))[0];
             $items_attivi  = array_filter($items, fn($it) => !isScaduto($it, $oggi) && !isNonAncoraAttivo($it, $oggi));
-            $durata_totale = array_sum(array_map(fn($it) => $it['tipo'] === 'video' ? 30 : $it['durata'], $items_attivi));
+            $$durata_totale = array_sum(array_map(fn($it) => $it['tipo'] === 'video' ? ($it['durata'] ?: 30) : $it['durata'], $items_attivi));durata_totale = array_sum(array_map(fn($it) => $it['tipo'] === 'video' ? 30 : $it['durata'], $items_attivi));
         ?>
         <div class="box">
             <h2>📋 <?php echo htmlspecialchars($pl_corrente['nome']); ?></h2>
