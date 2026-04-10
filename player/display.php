@@ -42,7 +42,7 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
         #player-root { position: absolute; width: 1920px; height: 1080px; top: 0; left: 0; transform-origin: top left; overflow: hidden; background: #000; }
         #main { position: absolute; top: <?= $MAIN_TOP ?>px; left: 0; width: 1920px; height: <?= $MAIN_H ?>px; display: flex; flex-direction: row; }
         #layer-tv { flex: 1; background: #111; position: relative; overflow: hidden; }
-        #tv-video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; }
+        #tv-video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill !important; }
         #tv-placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #222; font-size: 32px; text-align: center; }
         #layer-adv { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; background: #000; display: none; z-index: 20; }
         #adv-video { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; object-fit: contain; }
