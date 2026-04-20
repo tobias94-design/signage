@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
-if (isLoggedIn()) { header('Location: /'); exit; }
+if (isLoggedIn()) { header('Location: /dashboard.php'); exit; }
 
 $errore = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -8,9 +8,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($utente) {
         // Se password temporanea → forza cambio
         if ($utente['temp_password']) {
-            header('Location: /profilo.php?force=1');
+            header('Location: /dashboard.php');
         } else {
-            header('Location: /');
+            header('Location: /dashboard.php');
         }
         exit;
     }

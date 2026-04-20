@@ -12,7 +12,7 @@ try {
 } catch(Exception $e) {}
 
 $voci = [
-    'index.php'          => ['icona'=>'⊞', 'label'=>'Dashboard',      'sezione'=>'principale'],
+    'dashboard.php'          => ['icona'=>'⊞', 'label'=>'Dashboard',      'sezione'=>'principale'],
     'contenuti.php'      => ['icona'=>'▤',  'label'=>'Contenuti',      'sezione'=>'principale'],
     'playlist.php'       => ['icona'=>'⊟',  'label'=>'Playlist',       'sezione'=>'principale'],
     'profili.php'        => ['icona'=>'◈',  'label'=>'Profili',        'sezione'=>'principale'],
