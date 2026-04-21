@@ -7,6 +7,8 @@ Chrome viene lanciato dal bat.
 
 import os, sys, json, time, random, socket, subprocess, threading
 import urllib.request, urllib.parse, shutil, tempfile
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 VERSION     = '1.0.5'
 if getattr(sys, 'frozen', False):
