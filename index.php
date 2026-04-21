@@ -471,7 +471,7 @@ nav.stuck {
 }
 .cta-inner {
   position: relative; z-index: 1;
-  max-width: 900px; margin: 0 auto;
+  max-width: 660px; margin: 0 auto;
   padding: 110px 48px;
   text-align: center;
 }
@@ -493,10 +493,6 @@ nav.stuck {
 
 /* ── LOGO CTA animato ────────────────────────────────── */
 .cta-logo { margin: 32px auto 40px; display: flex; justify-content: center; }
-
-/* sovrascrive il br nel cta-title — titolo tutto inline */
-.cta-title br { display: none; }
-.cta-title { white-space: nowrap; }
 footer {
   background: var(--bg);
   border-top: 1px solid var(--border);
@@ -848,7 +844,7 @@ footer {
 <section class="cta-section">
   <div class="cta-glow"></div>
   <div class="cta-inner">
-    <h2 class="cta-title reveal">Pronto a portare i tuoi schermi nel <span class="accent">futuro?</span></h2>
+    <h2 class="cta-title reveal">Pronto a portare i tuoi<br>schermi nel <span class="accent">futuro?</span></h2>
 
     <!-- Logo constellation animato -->
     <div class="cta-logo reveal">
