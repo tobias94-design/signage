@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
 """
 PixelBridge Agent - Windows
-Solo pairing + heartbeat. Chrome viene lanciato dal bat.
+Solo pairing + heartbeat + cache locale contenuti playlist.
+Chrome viene lanciato dal bat.
 """
 
 import os, sys, json, time, random, socket, subprocess, threading
 import urllib.request, urllib.parse, shutil, tempfile
 
-VERSION     = '1.0.4'
+VERSION     = '1.0.5'
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 CONFIG_FILE     = os.path.join(BASE_DIR, 'config.json')
-SERVER_URL      = 'http://204.168.161.116'
+CACHE_DIR       = os.path.join(BASE_DIR, 'cache')
+SERVER_URL      = 'https://pixelbridge.it'
 PING_INTERVAL   = 60
+CACHE_INTERVAL  = 300   # controlla cache ogni 5 minuti
 PAIRING_TIMEOUT = 600
 APP_NAME        = 'PixelBridge'
+
+os.makedirs(CACHE_DIR, exist_ok=True)
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -33,7 +38,7 @@ def api_get(path):
     try:
         url = SERVER_URL + path
         req = urllib.request.Request(url, headers={'User-Agent': f'PixelBridge-Agent/{VERSION}'})
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=15) as r:
             return json.loads(r.read().decode())
     except Exception as e:
         return {'ok': False, 'error': str(e)}
@@ -51,6 +56,53 @@ def log(msg):
             f.write(line + '\n')
     except: pass
 
+# ── CACHE LOCALE ──────────────────────────────────────────────────
+def aggiorna_cache(token):
+    """Scarica i contenuti della playlist del dispositivo in locale."""
+    log("Cache: controllo contenuti da scaricare...")
+    res = api_get(f'/api/playlist_cache.php?token={urllib.parse.quote(token)}')
+    if not res.get('ok'):
+        log(f"Cache: errore API — {res.get('error','')}")
+        return
+
+    files_server = res.get('files', [])
+    nomi_server  = {f['file'] for f in files_server}
+
+    # Cancella file non più in playlist
+    for fname in os.listdir(CACHE_DIR):
+        if fname not in nomi_server:
+            try:
+                os.remove(os.path.join(CACHE_DIR, fname))
+                log(f"Cache: rimosso {fname}")
+            except: pass
+
+    # Scarica file mancanti
+    for f in files_server:
+        dest = os.path.join(CACHE_DIR, f['file'])
+        if os.path.exists(dest):
+            continue  # già in cache
+        url = SERVER_URL + f['url']
+        log(f"Cache: scarico {f['nome']} ({f['file']})...")
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': f'PixelBridge-Agent/{VERSION}'})
+            with urllib.request.urlopen(req, timeout=120) as r, open(dest, 'wb') as out:
+                shutil.copyfileobj(r, out)
+            log(f"Cache: {f['nome']} scaricato OK")
+        except Exception as e:
+            log(f"Cache: errore download {f['nome']} — {e}")
+            try: os.remove(dest)
+            except: pass
+
+def cache_loop(token):
+    """Loop che aggiorna la cache ogni CACHE_INTERVAL secondi."""
+    while True:
+        try:
+            aggiorna_cache(token)
+        except Exception as e:
+            log(f"Cache loop errore: {e}")
+        time.sleep(CACHE_INTERVAL)
+
+# ── AUTO-UPDATE ───────────────────────────────────────────────────
 def controlla_aggiornamento():
     try:
         res = api_get('/api/version.php')
@@ -170,6 +222,7 @@ def ping_loop(token):
 def main():
     log(f"=== PixelBridge Agent v{VERSION} ===")
     log(f"Server: {SERVER_URL} | Macchina: {get_machine_name()}")
+    log(f"Cache dir: {CACHE_DIR}")
     installa_autostart()
     controlla_aggiornamento()
     cfg   = load_config()
@@ -177,12 +230,15 @@ def main():
     if not token:
         log("Nessun token — avvio pairing")
         token = do_pairing()
-    log(f"Token: {token} — avvio heartbeat")
-    # Salva token su file txt per il bat
+    log(f"Token: {token} — avvio heartbeat e cache")
     token_file = os.path.join(BASE_DIR, 'token.txt')
     with open(token_file, 'w') as f:
         f.write(token)
-    log(f"Token salvato in token.txt — Chrome viene lanciato dal bat")
+    log(f"Token salvato in token.txt")
+
+    # Avvia cache in background
+    threading.Thread(target=cache_loop, args=(token,), daemon=True).start()
+
     # Heartbeat loop
     ping_loop(token)
 
