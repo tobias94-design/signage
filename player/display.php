@@ -127,8 +127,6 @@ let sidebarTimer  = null;
 let meteoCache    = {};
 let countdownIntervals = {};
 
-// Fingerprint per evitare restart carousel inutili
-// Usa solo id+tipo+attivo — ignora campi che cambiano spesso
 function slidesFingerprint(slides) {
     return slides.map(s => s.id + ':' + s.tipo + ':' + (s.attivo ? 1 : 0)).join('|');
 }
@@ -142,6 +140,27 @@ var PRESETS = {
     'gold':     'linear-gradient(135deg,#1a1200 0%,#4d3800 100%)',
     'carbon':   'linear-gradient(135deg,#111 0%,#2a2a2a 100%)',
 };
+
+// ── WATCHDOG — ricarica se il player si blocca per 2 minuti ──────
+let ultimoSuccesso = Date.now();
+function resetWatchdog() { ultimoSuccesso = Date.now(); }
+setInterval(() => {
+    if (Date.now() - ultimoSuccesso > 120000) {
+        console.log('Watchdog: nessuna risposta da 2 minuti — ricarico...');
+        location.reload();
+    }
+}, 10000);
+
+// ── RELOAD RAPIDO — controlla ogni 5 secondi ─────────────────────
+async function controllaReload() {
+    try {
+        const res = await fetch(BASE_URL + 'api/reload_check.php?token=' + TOKEN + '&t=' + Date.now());
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.reload) { location.reload(); }
+    } catch(e) {}
+}
+setInterval(controllaReload, 5000);
 
 // ── SIDEBAR CAROUSEL ─────────────────────────────────────────────
 function avviaSidebar(slides) {
@@ -536,10 +555,6 @@ function mostraADV(stato) {
     modalitaAttuale = 'adv';
     contenuti = [...(stato.contenuti || [])];
     indiceContenuto = 0;
-    if (stato.contenuto_ora) {
-        const idx = contenuti.findIndex(c => c.id === stato.contenuto_ora.id);
-        if (idx >= 0) indiceContenuto = idx;
-    }
     document.getElementById('main').style.display = 'none';
     const advEl = document.getElementById('layer-adv');
     advEl.style.top     = '0';
@@ -569,7 +584,6 @@ function mostraADV(stato) {
 function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
     if (idx >= contenuti.length) {
-        // Playlist finita — aspetta che l'API dica di tornare in TV
         setTimeout(aggiornaDaAPI, 500);
         return;
     }
@@ -631,15 +645,12 @@ async function aggiornaDaAPI() {
         const res   = await fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&t=' + Date.now());
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const stato = await res.json();
+        resetWatchdog();
 
         if (stato.errore) { setTimeout(aggiornaDaAPI, 15000); return; }
 
-        // Reload remoto richiesto dal pannello admin
-        if (stato.reload) { location.reload(); return; }
-
         if (stato.banner) applicaBanner(stato.banner);
 
-        // Confronta solo id+tipo+attivo — evita restart per campi irrilevanti
         const slideRicevute = stato.sidebar_slides || [];
         const fp = slidesFingerprint(slideRicevute);
         if (fp !== slidesFingerpr) {
@@ -648,15 +659,11 @@ async function aggiornaDaAPI() {
             Object.keys(countdownIntervals).forEach(id => {
                 clearInterval(countdownIntervals[id]); delete countdownIntervals[id];
             });
-            // Aggiorna i dati delle slide esistenti senza restartare il carousel
-            // se solo i contenuti sono cambiati (stesso set di id)
             const vecchiIds = sidebarSlides.map(s => s.id).join('|');
             const nuoviIds  = slideRicevute.map(s => s.id).join('|');
             if (vecchiIds === nuoviIds && sidebarSlides.length > 0) {
-                // Aggiorna i dati in-place senza resettare l'indice
                 sidebarSlides = slideRicevute;
             } else {
-                // Set di slide cambiato — restart dal primo
                 avviaSidebar(slideRicevute);
             }
         }

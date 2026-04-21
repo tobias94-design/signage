@@ -14,7 +14,7 @@ else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 CONFIG_FILE     = os.path.join(BASE_DIR, 'config.json')
-SERVER_URL      = 'http://204.168.161.116'
+SERVER_URL = 'https://pixelbridge.it'
 PING_INTERVAL   = 60
 PAIRING_TIMEOUT = 600
 APP_NAME        = 'PixelBridge'
