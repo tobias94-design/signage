@@ -114,6 +114,18 @@ const BASE_URL  = '/';
 const SHEET_URL = '<?php echo htmlspecialchars($sheet_url); ?>';
 const LOOP_ADV  = <?php echo (int)($dispositivo['loop_adv'] ?? 0); ?>;
 
+// ── DEBUG OVERLAY ─────────────────────────────────────────────────
+function debugLog(msg) {
+    let el = document.getElementById('debug-overlay');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'debug-overlay';
+        el.style.cssText = 'position:fixed;bottom:10px;left:10px;background:rgba(0,0,0,0.8);color:#0f0;font-size:12px;padding:6px 10px;z-index:9999;font-family:monospace;border-radius:4px;';
+        document.body.appendChild(el);
+    }
+    el.innerHTML = msg;
+}
+
 const GIORNI_IT = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
 const MESI      = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 
@@ -145,6 +157,10 @@ var PRESETS = {
 // ── CACHE LOCALE ─────────────────────────────────────────────────
 const LOCAL_CACHE = 'http://127.0.0.1:8765/';
 async function urlContenuto(file) {
+    try {
+        const res = await fetch(LOCAL_CACHE + file, { method: 'HEAD', signal: AbortSignal.timeout(500) });
+        if (res.ok) return LOCAL_CACHE + file;
+    } catch(e) {}
     return BASE_URL + 'uploads/' + file;
 }
 
@@ -598,8 +614,10 @@ function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
     if (idx >= contenuti.length) {
         if (statoCorrente && statoCorrente.loop_adv) {
-            mostraContenuto(0); // loop ADV continuo
+            debugLog('LOOP ADV: ricomincio (loop_adv=' + (statoCorrente && statoCorrente.loop_adv) + ')');
+            mostraContenuto(0);
         } else {
+            debugLog('FINE PLAYLIST: torno in TV (loop_adv=' + (statoCorrente && statoCorrente.loop_adv) + ')');
             setTimeout(aggiornaDaAPI, 500);
         }
         return;
@@ -690,31 +708,24 @@ async function aggiornaDaAPI() {
         const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
         const streamCambiato = statoCorrente && statoCorrente.stream_url !== stato.stream_url;
 
-      if (stato.modalita === 'tv') {
-    // Se loop ADV attivo e siamo in ADV, ricomincia invece di andare in TV
-    if (stato.loop_adv && modalitaAttuale === 'adv') {
-        mostraContenuto(0);
-        setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
-        statoCorrente = stato;
-        return;
-    }
-    if (cambiata || streamCambiato) {
-        mostraTV();
-        if (streamCambiato || !statoCorrente) {
-            const v = document.getElementById('tv-video');
-            v.pause(); v.src = ''; v.srcObject = null;
-            setTimeout(() => avviaSegnaleTVRuntime(stato.stream_url || ''), 500);
-        }
-    }
-    setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
+        if (stato.modalita === 'tv') {
+            if (cambiata || streamCambiato) {
+                mostraTV();
+                if (streamCambiato || !statoCorrente) {
+                    const v = document.getElementById('tv-video');
+                    v.pause(); v.src = ''; v.srcObject = null;
+                    setTimeout(() => avviaSegnaleTVRuntime(stato.stream_url || ''), 500);
+                }
+            }
+            setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
         } else if (stato.modalita === 'adv') {
-    if (cambiata) mostraADV(stato);
-    setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_tv || 60) * 1000, 30000));
+            if (cambiata) mostraADV(stato);
+            setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_tv || 60) * 1000, 30000));
         }
-statoCorrente = stato;
-} catch(e) {
-    setTimeout(aggiornaDaAPI, 15000);
-}
+        statoCorrente = stato;
+    } catch(e) {
+        setTimeout(aggiornaDaAPI, 15000);
+    }
 }
 
 // ── INIT ─────────────────────────────────────────────────────────
