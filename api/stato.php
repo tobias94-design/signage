@@ -5,7 +5,6 @@ header('Access-Control-Allow-Origin: *');
 require_once __DIR__ . '/../includes/db.php';
 $db = getDB();
 
-// ── AUTO-DISABLE SLIDE COUNTDOWN ──────────────────────────────
 if (isset($_GET['action']) && $_GET['action'] === 'disable_slide') {
     $slideId = (int)($_GET['id'] ?? 0);
     if ($slideId > 0) {
@@ -26,8 +25,8 @@ if (!$token) { echo json_encode(['errore' => 'Token mancante']); exit; }
 
 $cache_file = __DIR__ . '/../cache/stato-' . preg_replace('/[^a-z0-9\-]/', '', $token) . '.json';
 
-// Migrazione colonna forza_adv
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN forza_adv INTEGER DEFAULT 0"); } catch(Exception $e) {}
+try { $db->exec("ALTER TABLE dispositivi ADD COLUMN loop_adv INTEGER DEFAULT 0"); } catch(Exception $e) {}
 
 $stmt = $db->prepare('SELECT * FROM dispositivi WHERE token = ?');
 $stmt->execute([$token]);
@@ -38,25 +37,20 @@ if (!$dispositivo) { echo json_encode(['errore' => 'Dispositivo non trovato']); 
 $db->prepare('UPDATE dispositivi SET stato = ?, ultimo_ping = CURRENT_TIMESTAMP WHERE token = ?')
    ->execute(['online', $token]);
 
-// ── RELOAD FLAG ────────────────────────────────────────────────
+$loop_adv = (bool)($dispositivo['loop_adv'] ?? false);
+
 $reload = false;
 try {
     $reload = (bool)$db->query("SELECT reload_richiesto FROM dispositivi WHERE token=" . $db->quote($token))->fetchColumn();
-    if ($reload) {
-        $db->prepare("UPDATE dispositivi SET reload_richiesto=0 WHERE token=?")->execute([$token]);
-    }
+    if ($reload) $db->prepare("UPDATE dispositivi SET reload_richiesto=0 WHERE token=?")->execute([$token]);
 } catch(Exception $e) {}
 
-// ── FORZA ADV FLAG ─────────────────────────────────────────────
 $forza_adv = false;
 try {
     $forza_adv = (bool)$db->query("SELECT forza_adv FROM dispositivi WHERE token=" . $db->quote($token))->fetchColumn();
-    if ($forza_adv) {
-        $db->prepare("UPDATE dispositivi SET forza_adv=0 WHERE token=?")->execute([$token]);
-    }
+    if ($forza_adv) $db->prepare("UPDATE dispositivi SET forza_adv=0 WHERE token=?")->execute([$token]);
 } catch(Exception $e) {}
 
-// ── LOG PASSAGGIO ADV ──────────────────────────────────────────
 if (!empty($_GET['log_contenuto'])) {
     $cid  = (int)$_GET['log_contenuto'];
     $dur  = (int)($_GET['log_durata'] ?? 0);
@@ -68,19 +62,17 @@ if (!empty($_GET['log_contenuto'])) {
 }
 
 if (!$dispositivo['profilo_id']) {
-    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'banner' => getBanner($db), 'sidebar_slides' => []];
+    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'loop_adv' => $loop_adv, 'banner' => getBanner($db), 'sidebar_slides' => []];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
 }
 
-$profilo = $db->query("SELECT * FROM profili WHERE id = " . intval($dispositivo['profilo_id']))
-              ->fetch(PDO::FETCH_ASSOC);
+$profilo = $db->query("SELECT * FROM profili WHERE id = " . intval($dispositivo['profilo_id']))->fetch(PDO::FETCH_ASSOC);
 
 $oggi       = date('Y-m-d');
 $oraOra     = date('H:i');
 $giornoOggi = date('N');
 
-// PLAYLIST BASE
 $regola_base = null;
 try {
     $regola_base = $db->query("
@@ -105,13 +97,12 @@ try {
 }
 
 if (!$regola_base) {
-    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
+    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'loop_adv' => $loop_adv, 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
                  'sidebar_slides' => getSidebarSlides($db, $profilo['id'], $token)];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
 }
 
-// EVENTO ATTIVO ORA
 $evento_attivo = null;
 try {
     $eventi = $db->query("
@@ -133,19 +124,17 @@ try {
     }
 } catch(Exception $e) { $evento_attivo = null; }
 
-// CONTENUTI
 $contenuti_base   = getContenutiPlaylist($db, $regola_base['playlist_id'], $oggi);
 $contenuti_evento = $evento_attivo ? getContenutiPlaylist($db, $evento_attivo['playlist_id'], $oggi) : [];
 $contenuti_tutti  = array_values(array_merge($contenuti_base, $contenuti_evento));
 
 if (empty($contenuti_tutti)) {
-    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
+    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'loop_adv' => $loop_adv, 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
                  'sidebar_slides' => getSidebarSlides($db, $profilo['id'], $token)];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
 }
 
-// SCHEDULING
 $DURATA_VIDEO_DEFAULT = 30;
 $getDurata = function($c) use ($DURATA_VIDEO_DEFAULT) {
     return $c['tipo'] === 'video' ? ((int)$c['durata'] ?: $DURATA_VIDEO_DEFAULT) : (int)$c['durata'];
@@ -159,11 +148,8 @@ $secondi_giorno  = (int)date('H') * 3600 + (int)date('i') * 60 + (int)date('s');
 $ciclo_totale    = $intervallo_sec + $durata_playlist;
 $posizione_ciclo = $secondi_giorno % $ciclo_totale;
 
-// ── FORZA ADV: bypassa il timer ────────────────────────────────
 if ($forza_adv || $posizione_ciclo >= $intervallo_sec) {
-
     if ($forza_adv) {
-        // Forza ADV: mostra tutta la playlist dall'inizio
         $pos_in_adv      = 0;
         $secondi_alla_tv = $durata_playlist;
     } else {
@@ -186,6 +172,7 @@ if ($forza_adv || $posizione_ciclo >= $intervallo_sec) {
     $risposta = [
         'modalita'        => 'adv',
         'reload'          => $reload,
+        'loop_adv'        => $loop_adv,
         'forza_adv'       => $forza_adv,
         'playlist_nome'   => $regola_base['playlist_nome'] . ($evento_attivo ? ' + ' . $evento_attivo['nome'] : ''),
         'contenuti'       => $contenuti_tutti,
@@ -196,7 +183,6 @@ if ($forza_adv || $posizione_ciclo >= $intervallo_sec) {
         'profilo'         => $profilo['nome'],
         'evento_attivo'   => $evento_attivo ? $evento_attivo['nome'] : null,
         'sidebar_slides'  => getSidebarSlides($db, $profilo['id'], $token),
-        'loop_adv'        => (bool)($dispositivo['loop_adv'] ?? false),
         'debug'           => ($forza_adv ? "ADV FORZATO" : "ADV per altri {$secondi_alla_tv}s")
     ];
 } else {
@@ -204,6 +190,7 @@ if ($forza_adv || $posizione_ciclo >= $intervallo_sec) {
     $risposta = [
         'modalita'         => 'tv',
         'reload'           => $reload,
+        'loop_adv'         => $loop_adv,
         'secondi_alla_adv' => $secondi_alla_adv,
         'banner'           => getBanner($db, $profilo),
         'profilo'          => $profilo['nome'],
