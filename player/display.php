@@ -611,6 +611,7 @@ function mostraADV(stato) {
 
 // ── CONTENUTO ADV ────────────────────────────────────────────────
 function mostraContenuto(idx) {
+    debugLog('mostraContenuto(' + idx + ') contenuti=' + contenuti.length + ' loop=' + (statoCorrente && statoCorrente.loop_adv));
     if (!contenuti.length) { mostraTV(); return; }
     if (idx >= contenuti.length) {
         if (statoCorrente && statoCorrente.loop_adv) {
