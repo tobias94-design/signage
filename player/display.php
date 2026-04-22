@@ -690,24 +690,31 @@ async function aggiornaDaAPI() {
         const cambiata = !statoCorrente || statoCorrente.modalita !== stato.modalita;
         const streamCambiato = statoCorrente && statoCorrente.stream_url !== stato.stream_url;
 
-        if (stato.modalita === 'tv') {
-            if (cambiata || streamCambiato) {
-                mostraTV();
-                if (streamCambiato || !statoCorrente) {
-                    const v = document.getElementById('tv-video');
-                    v.pause(); v.src = ''; v.srcObject = null;
-                    setTimeout(() => avviaSegnaleTVRuntime(stato.stream_url || ''), 500);
-                }
-            }
-            setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
-        } else if (stato.modalita === 'adv') {
-            if (cambiata) mostraADV(stato);
-            setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_tv || 60) * 1000, 30000));
-        }
+      if (stato.modalita === 'tv') {
+    // Se loop ADV attivo e siamo in ADV, ricomincia invece di andare in TV
+    if (stato.loop_adv && modalitaAttuale === 'adv') {
+        mostraContenuto(0);
+        setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
         statoCorrente = stato;
-    } catch(e) {
-        setTimeout(aggiornaDaAPI, 15000);
+        return;
     }
+    if (cambiata || streamCambiato) {
+        mostraTV();
+        if (streamCambiato || !statoCorrente) {
+            const v = document.getElementById('tv-video');
+            v.pause(); v.src = ''; v.srcObject = null;
+            setTimeout(() => avviaSegnaleTVRuntime(stato.stream_url || ''), 500);
+        }
+    }
+    setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
+        } else if (stato.modalita === 'adv') {
+    if (cambiata) mostraADV(stato);
+    setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_tv || 60) * 1000, 30000));
+        }
+statoCorrente = stato;
+} catch(e) {
+    setTimeout(aggiornaDaAPI, 15000);
+}
 }
 
 // ── INIT ─────────────────────────────────────────────────────────
