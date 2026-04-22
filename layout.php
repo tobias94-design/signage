@@ -345,7 +345,24 @@ require_once 'includes/header.php';
                 </div>
                 
                 <label>Logo <span style="font-size:10px;color:var(--sg-muted);">400×120px consigliato</span></label>
-                <input type="file" name="logo" id="logoInput" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="margin-bottom:10px;">
+                <input type="file" name="logo" id="logoInput" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="margin-bottom:6px;">
+                <?php
+$logo_esistenti = glob(__DIR__ . '/assets/img/logo_*.{png,jpg,jpeg,svg,webp}', GLOB_BRACE);
+if (!empty($logo_esistenti)): ?>
+<div style="margin-bottom:10px;">
+    <div style="font-size:10px;color:var(--sg-muted);margin-bottom:6px;">Oppure seleziona logo esistente:</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <?php foreach ($logo_esistenti as $lpath): $lnome = basename($lpath); ?>
+        <div onclick="selezionaLogo('<?= htmlspecialchars($lnome) ?>')"
+             style="cursor:pointer;padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;transition:border-color 0.2s;"
+             onmouseover="this.style.borderColor='rgba(232,80,2,0.5)'"
+             onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'">
+            <img src="assets/img/<?= htmlspecialchars($lnome) ?>" style="height:24px;object-fit:contain;display:block;">
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
                 <?php if (!empty($sel_dev['logo'])): ?>
                 <div id="logoCurrentWrap" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px 12px;margin-bottom:14px;">
                     <img id="logoCurrentImg" src="assets/img/<?= htmlspecialchars($sel_dev['logo']) ?>" style="height:28px;object-fit:contain;max-width:90px;">
@@ -786,6 +803,18 @@ window.addEventListener('resize',aggiornaPreview);
 aggiornaPreview();
 
 // ── Logo preview ──
+function selezionaLogo(nome) {
+    document.getElementById('logoAttuale').value = nome;
+    var img = document.getElementById('previewLogoImg');
+    img.src = 'assets/img/' + nome; img.style.display = 'block';
+    var wrap = document.getElementById('logoCurrentWrap');
+    if (wrap) {
+        document.getElementById('logoCurrentImg').src = 'assets/img/' + nome;
+        wrap.style.display = 'flex';
+    }
+    if (logoInput) logoInput.value = '';
+    aggiornaPreview();
+}
 var logoInput=document.getElementById('logoInput');
 if(logoInput){
     logoInput.addEventListener('change',function(){
