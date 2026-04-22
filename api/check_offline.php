@@ -7,7 +7,7 @@
 require_once __DIR__ . '/../includes/db.php';
 
 $SOGLIA_MINUTI   = 10;
-$SENDGRID_KEY = trim(file_get_contents('/var/www/html/config/sendgrid.key'));
+$SENDGRID_KEY    = trim(file_get_contents('/var/www/html/config/sendgrid.key'));
 $EMAIL_TO        = 'tobiasola@gymnasiumclub.net';
 $EMAIL_FROM      = 'noreply@pixelbridge.it';
 $EMAIL_FROM_NAME = 'PixelBridge';
@@ -24,12 +24,12 @@ try {
 } catch(Exception $e) {}
 
 // Trova dispositivi offline da più di X minuti
+// NON filtra per stato — lo stato viene gestito solo da stato.php
 $dispositivi_offline = $db->query("
     SELECT token, nome, club, ultimo_ping
     FROM dispositivi
     WHERE ultimo_ping IS NOT NULL
     AND ultimo_ping < datetime('now', '-{$SOGLIA_MINUTI} minutes')
-    AND stato = 'online'
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 foreach ($dispositivi_offline as $d) {
@@ -41,9 +41,6 @@ foreach ($dispositivi_offline as $d) {
     ")->fetchColumn();
 
     if ($già_notificato) continue;
-
-    // Segna il dispositivo come offline
-    $db->prepare("UPDATE dispositivi SET stato='offline' WHERE token=?")->execute([$d['token']]);
 
     // Invia email
     $minuti_off = round((time() - strtotime($d['ultimo_ping'])) / 60);
@@ -87,7 +84,6 @@ foreach ($dispositivi_offline as $d) {
     curl_close($ch);
 
     if ($http_code === 202) {
-        // Salva notifica inviata
         $db->prepare("INSERT INTO notifiche_offline (dispositivo_token) VALUES (?)")->execute([$d['token']]);
         echo "[OK] Notifica inviata per {$nome_disp}\n";
     } else {
