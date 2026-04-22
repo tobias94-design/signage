@@ -345,16 +345,6 @@ require_once __DIR__ . '/includes/header.php';
             </select>
             <?php endif; ?>
 
-            <?php if ($view === 'modifica'): ?>
-            <div style="margin-top:12px;display:flex;align-items:center;gap:10px;padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.07);">
-                <input type="checkbox" name="loop_adv" id="loop_adv" value="1"
-                       <?= !empty($dev['loop_adv']) ? 'checked' : '' ?>
-                       style="width:18px;height:18px;cursor:pointer;accent-color:#e85002;">
-                <label for="loop_adv" style="margin:0;cursor:pointer;font-size:13px;">
-                    🔁 <strong>Loop ADV continuo</strong> — la playlist riparte automaticamente senza tornare alla TV
-                </label>
-            </div>
-            <?php endif; ?>
 
             <label>URL Google Sheet Corsi</label>
             <input type="text" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/..." value="<?= htmlspecialchars($dev['sheet_url'] ?? '') ?>">
