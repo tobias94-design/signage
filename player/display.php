@@ -170,7 +170,11 @@ async function controllaReload() {
         const res = await fetch(BASE_URL + 'api/reload_check.php?token=' + TOKEN + '&t=' + Date.now());
         if (!res.ok) return;
         const data = await res.json();
-        if (data.reload) { location.reload(); }
+        if (data.reload) { location.reload(); return; }
+        // Forza ADV rilevato — chiama subito aggiornaDaAPI
+        if (data.forza_adv && modalitaAttuale !== 'adv') {
+            aggiornaDaAPI();
+        }
     } catch(e) {}
 }
 setInterval(controllaReload, 5000);
