@@ -7,7 +7,7 @@
 require_once __DIR__ . '/../includes/db.php';
 
 $SOGLIA_MINUTI   = 10;
-$SENDGRID_KEY    = trim(file_get_contents(__DIR__ . '/../../config/sendgrid.key'));
+$SENDGRID_KEY = trim(file_get_contents('/var/www/html/config/sendgrid.key'));
 $EMAIL_TO        = 'tobiasola@gymnasiumclub.net';
 $EMAIL_FROM      = 'noreply@pixelbridge.it';
 $EMAIL_FROM_NAME = 'PixelBridge';
