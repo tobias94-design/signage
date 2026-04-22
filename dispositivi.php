@@ -77,6 +77,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $note       = trim($_POST['note'] ?? '');
         $lat        = $_POST['lat'] !== '' ? (float)$_POST['lat'] : null;
         $lon        = $_POST['lon'] !== '' ? (float)$_POST['lon'] : null;
+        $db->prepare("UPDATE dispositivi SET nome=?,club=?,profilo_id=?,layout=?,sheet_url=?,stream_url=?,numero_tv=?,indirizzo=?,note=?,lat=?,lon=?,tipo_display='tv' WHERE token=?")
+           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $stream_url, $numero_tv, $indirizzo, $note, $lat, $lon, $tok]);
         header('Location: dispositivi.php'); exit;
     }
 
@@ -278,12 +280,12 @@ require_once __DIR__ . '/includes/header.php';
             <form method="POST" style="margin:0;">
                 <input type="hidden" name="action" value="forza_adv">
                 <input type="hidden" name="token" value="<?= $d['token'] ?>">
-                <button type="submit" class="btn btn-sm" style="background:rgba(232,80,2,0.7);" title="Forza ADV ora">⚡ Forza ADV</button>
+                <button type="submit" class="btn btn-sm" style="background:rgba(232,80,2,0.7);">⚡ Forza ADV</button>
             </form>
             <form method="POST" style="margin:0;">
                 <input type="hidden" name="action" value="reload_display">
                 <input type="hidden" name="token" value="<?= $d['token'] ?>">
-                <button type="submit" class="btn btn-sm btn-secondary" title="Ricarica display">🔄 Ricarica</button>
+                <button type="submit" class="btn btn-sm btn-secondary">🔄 Ricarica</button>
             </form>
             <a href="dispositivi.php?view=modifica&token=<?= $d['token'] ?>" class="btn btn-sm btn-secondary">✏️ Modifica</a>
             <form method="POST" onsubmit="return confirm('Eliminare questo dispositivo?')" style="margin:0;">
@@ -340,7 +342,6 @@ require_once __DIR__ . '/includes/header.php';
                 <?php endforeach; ?>
             </select>
             <?php endif; ?>
-
 
             <label>URL Google Sheet Corsi</label>
             <input type="text" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/..." value="<?= htmlspecialchars($dev['sheet_url'] ?? '') ?>">
