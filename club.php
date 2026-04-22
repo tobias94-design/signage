@@ -163,7 +163,7 @@ require_once __DIR__ . '/includes/header.php';
         <a href="dispositivi.php?view=modifica&token=<?= urlencode($c['dispositivi'][0]['token'] ?? '') ?>"
            class="btn btn-sm btn-secondary" style="font-size:11px;">✏️ Modifica</a>
         <?php if (!empty($c['dispositivi'][0]['token'])): ?>
-        <a href="player/corsi.php?token=<?= urlencode($c['dispositivi'][0]['token']) ?>"
+        <a href="player/display.php?token=<?= urlencode($c['dispositivi'][0]['token']) ?>"
            target="_blank" class="btn btn-sm btn-success" style="font-size:11px;">▶ Player</a>
         <?php endif; ?>
     </div>
