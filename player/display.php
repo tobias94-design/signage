@@ -611,11 +611,11 @@ function mostraADV(stato) {
 
 // ── CONTENUTO ADV ────────────────────────────────────────────────
 function mostraContenuto(idx) {
-    debugLog('mostraContenuto(' + idx + ') contenuti=' + contenuti.length + ' loop=' + (statoCorrente && statoCorrente.loop_adv));
     if (!contenuti.length) { mostraTV(); return; }
     if (idx >= contenuti.length) {
         if (statoCorrente && statoCorrente.loop_adv) {
             debugLog('LOOP ADV: ricomincio (loop_adv=' + (statoCorrente && statoCorrente.loop_adv) + ')');
+            if (advTimer) { clearTimeout(advTimer); advTimer = null; }
             mostraContenuto(0);
         } else {
             debugLog('FINE PLAYLIST: torno in TV (loop_adv=' + (statoCorrente && statoCorrente.loop_adv) + ')');
