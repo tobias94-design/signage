@@ -113,8 +113,6 @@ const CLUB      = '<?php echo htmlspecialchars($club); ?>';
 const BASE_URL  = '/';
 const SHEET_URL = '<?php echo htmlspecialchars($sheet_url); ?>';
 
-    el.innerHTML = msg;
-}
 
 const GIORNI_IT = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
 const MESI      = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
