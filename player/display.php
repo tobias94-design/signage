@@ -112,17 +112,7 @@ const TOKEN     = '<?php echo htmlspecialchars($token); ?>';
 const CLUB      = '<?php echo htmlspecialchars($club); ?>';
 const BASE_URL  = '/';
 const SHEET_URL = '<?php echo htmlspecialchars($sheet_url); ?>';
-const LOOP_ADV  = <?php echo (int)($dispositivo['loop_adv'] ?? 0); ?>;
 
-// ── DEBUG OVERLAY ─────────────────────────────────────────────────
-function debugLog(msg) {
-    let el = document.getElementById('debug-overlay');
-    if (!el) {
-        el = document.createElement('div');
-        el.id = 'debug-overlay';
-        el.style.cssText = 'position:fixed;bottom:10px;left:10px;background:rgba(0,0,0,0.8);color:#0f0;font-size:12px;padding:6px 10px;z-index:9999;font-family:monospace;border-radius:4px;';
-        document.body.appendChild(el);
-    }
     el.innerHTML = msg;
 }
 
@@ -614,11 +604,9 @@ function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
     if (idx >= contenuti.length) {
         if (statoCorrente && statoCorrente.loop_adv) {
-            debugLog('LOOP ADV: ricomincio (loop_adv=' + (statoCorrente && statoCorrente.loop_adv) + ')');
             if (advTimer) { clearTimeout(advTimer); advTimer = null; }
             mostraContenuto(0);
         } else {
-            debugLog('FINE PLAYLIST: torno in TV (loop_adv=' + (statoCorrente && statoCorrente.loop_adv) + ')');
             setTimeout(aggiornaDaAPI, 500);
         }
         return;
