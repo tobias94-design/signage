@@ -196,6 +196,7 @@ if ($forza_adv || $posizione_ciclo >= $intervallo_sec) {
         'profilo'         => $profilo['nome'],
         'evento_attivo'   => $evento_attivo ? $evento_attivo['nome'] : null,
         'sidebar_slides'  => getSidebarSlides($db, $profilo['id'], $token),
+        'loop_adv'        => (bool)($dispositivo['loop_adv'] ?? false),
         'debug'           => ($forza_adv ? "ADV FORZATO" : "ADV per altri {$secondi_alla_tv}s")
     ];
 } else {
