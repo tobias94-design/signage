@@ -15,7 +15,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
 
     if (in_array($estensione, $tipi_video)) {
         $tipo   = 'video';
-        // Legge la durata reale inviata dal browser via JavaScript
         $durata = intval($_POST['durata_video']) ?: 30;
     } elseif (in_array($estensione, $tipi_immagine)) {
         $tipo   = 'immagine';
@@ -65,7 +64,7 @@ require_once 'includes/header.php';
 
     <div class="box">
         <h2>Carica nuovo contenuto</h2>
-        <form method="POST" enctype="multipart/form-data" onsubmit="return checkDurata()">
+        <form method="POST" enctype="multipart/form-data" id="uploadForm" onsubmit="return avviaUpload()">
             <div class="form-grid">
                 <div>
                     <label>Nome contenuto</label>
@@ -90,8 +89,32 @@ require_once 'includes/header.php';
                 </div>
                 <div>
                     <label>&nbsp;</label>
-                    <button type="submit" class="btn">Carica</button>
+                    <button type="submit" class="btn" id="btnUpload">Carica</button>
                 </div>
+            </div>
+
+            <!-- Anteprima file selezionato -->
+            <div id="preview-wrap" style="display:none;margin-top:16px;padding:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;">
+                <div style="font-size:11px;color:var(--sg-muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Anteprima</div>
+                <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                    <div id="preview-media" style="flex-shrink:0;"></div>
+                    <div style="flex:1;min-width:0;">
+                        <div id="preview-nome" style="font-size:13px;font-weight:600;color:var(--sg-white);margin-bottom:4px;"></div>
+                        <div id="preview-info" style="font-size:12px;color:var(--sg-muted);"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Barra progresso -->
+            <div id="progress-wrap" style="display:none;margin-top:16px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-size:12px;color:var(--sg-muted);" id="progress-label">Caricamento in corso...</span>
+                    <span style="font-size:12px;font-weight:700;color:var(--sg-orange);" id="progress-pct">0%</span>
+                </div>
+                <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+                    <div id="progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#e85002,#ff7a3d);border-radius:3px;transition:width 0.2s ease;"></div>
+                </div>
+                <div style="font-size:11px;color:var(--sg-muted);margin-top:6px;" id="progress-size"></div>
             </div>
         </form>
     </div>
@@ -129,7 +152,7 @@ require_once 'includes/header.php';
                     <span style="color:var(--sg-muted);font-size:12px;">—</span>
                     <?php endif; ?>
                 </td>
-                <td><?php echo $c['tipo'] === 'video' ? '▶ intero' : $c['durata'] . 's'; ?></td>
+                <td><?php echo $c['tipo'] === 'video' ? '▶ ' . $c['durata'] . 's' : $c['durata'] . 's'; ?></td>
                 <td><?php echo date('d/m/Y H:i', strtotime($c['creato_il'])); ?></td>
                 <td>
                     <a href="/contenuti.php?elimina=<?php echo $c['id']; ?>"
@@ -150,48 +173,124 @@ require_once 'includes/header.php';
 </style>
 
 <script>
-function checkDurata() {
-    const fileInput = document.getElementById('fileInput');
-    const file = fileInput.files[0];
+function formatBytes(bytes) {
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+document.getElementById('fileInput').addEventListener('change', function() {
+    const file  = this.files[0];
+    const campo = document.getElementById('campo-durata');
+    const wrap  = document.getElementById('preview-wrap');
+    if (!file) { wrap.style.display = 'none'; return; }
+
+    const ext     = file.name.split('.').pop().toLowerCase();
+    const isVideo = ['mp4', 'webm'].includes(ext);
+    campo.style.display = isVideo ? 'none' : 'block';
+
+    // Anteprima
+    const mediaEl  = document.getElementById('preview-media');
+    const nomeEl   = document.getElementById('preview-nome');
+    const infoEl   = document.getElementById('preview-info');
+    nomeEl.textContent = file.name;
+
+    if (isVideo) {
+        const video = document.createElement('video');
+        video.style.cssText = 'width:120px;height:68px;object-fit:cover;border-radius:8px;';
+        video.muted = true; video.preload = 'metadata';
+        video.onloadedmetadata = function() {
+            const dur = Math.ceil(video.duration);
+            infoEl.textContent = `Video · ${dur}s · ${formatBytes(file.size)}`;
+            let hidden = document.getElementById('durata_video_hidden');
+            if (!hidden) {
+                hidden = document.createElement('input');
+                hidden.type = 'hidden'; hidden.name = 'durata_video'; hidden.id = 'durata_video_hidden';
+                document.getElementById('uploadForm').appendChild(hidden);
+            }
+            hidden.value = dur;
+        };
+        video.src = URL.createObjectURL(file);
+        mediaEl.innerHTML = ''; mediaEl.appendChild(video);
+    } else {
+        const img = document.createElement('img');
+        img.style.cssText = 'width:120px;height:68px;object-fit:cover;border-radius:8px;';
+        img.src = URL.createObjectURL(file);
+        infoEl.textContent = `Immagine · ${formatBytes(file.size)}`;
+        mediaEl.innerHTML = ''; mediaEl.appendChild(img);
+    }
+    wrap.style.display = 'block';
+});
+
+function avviaUpload() {
+    const file = document.getElementById('fileInput').files[0];
     if (!file) return true;
-    const ext = file.name.split('.').pop().toLowerCase();
-    if (['mp4', 'webm'].includes(ext)) {
+
+    const ext     = file.name.split('.').pop().toLowerCase();
+    const isVideo = ['mp4', 'webm'].includes(ext);
+
+    if (isVideo) {
         const hidden = document.getElementById('durata_video_hidden');
         if (!hidden || !hidden.value || hidden.value === '0') {
             alert('Attendi che il video venga analizzato prima di inviare.');
             return false;
         }
     }
-    return true;
-}
 
-document.getElementById('fileInput').addEventListener('change', function() {
-    const file   = this.files[0];
-    const campo  = document.getElementById('campo-durata');
-    if (!file) return;
-    const ext    = file.name.split('.').pop().toLowerCase();
-    const isVideo = ['mp4', 'webm'].includes(ext);
-    campo.style.display = isVideo ? 'none' : 'block';
+    // Usa XMLHttpRequest per mostrare progresso
+    const form = document.getElementById('uploadForm');
+    const fd   = new FormData(form);
 
-    if (isVideo) {
-        const video = document.createElement('video');
-        video.preload = 'metadata';
-        video.onloadedmetadata = function() {
-            URL.revokeObjectURL(video.src);
-            let hidden = document.getElementById('durata_video_hidden');
-            if (!hidden) {
-                hidden = document.createElement('input');
-                hidden.type = 'hidden';
-                hidden.name = 'durata_video';
-                hidden.id = 'durata_video_hidden';
-                document.querySelector('form').appendChild(hidden);
+    const progressWrap = document.getElementById('progress-wrap');
+    const progressBar  = document.getElementById('progress-bar');
+    const progressPct  = document.getElementById('progress-pct');
+    const progressLbl  = document.getElementById('progress-label');
+    const progressSize = document.getElementById('progress-size');
+    const btnUpload    = document.getElementById('btnUpload');
+
+    progressWrap.style.display = 'block';
+    btnUpload.disabled = true;
+    btnUpload.textContent = 'Caricamento...';
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/contenuti.php', true);
+
+    xhr.upload.onprogress = function(e) {
+        if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            progressBar.style.width = pct + '%';
+            progressPct.textContent = pct + '%';
+            progressSize.textContent = formatBytes(e.loaded) + ' / ' + formatBytes(e.total);
+            if (pct === 100) {
+                progressLbl.textContent = 'Elaborazione in corso...';
             }
-            hidden.value = Math.ceil(video.duration);
-            console.log('Durata video rilevata:', hidden.value, 'secondi');
-        };
-        video.src = URL.createObjectURL(file);
-    }
-});
+        }
+    };
+
+    xhr.onload = function() {
+        if (xhr.status === 200) {
+            progressBar.style.width = '100%';
+            progressPct.textContent = '100%';
+            progressLbl.textContent = '✓ Caricamento completato!';
+            progressBar.style.background = 'linear-gradient(90deg,#30d158,#34c759)';
+            setTimeout(() => { location.reload(); }, 800);
+        } else {
+            progressLbl.textContent = '✕ Errore durante il caricamento';
+            progressBar.style.background = '#e94560';
+            btnUpload.disabled = false;
+            btnUpload.textContent = 'Carica';
+        }
+    };
+
+    xhr.onerror = function() {
+        progressLbl.textContent = '✕ Errore di rete';
+        progressBar.style.background = '#e94560';
+        btnUpload.disabled = false;
+        btnUpload.textContent = 'Carica';
+    };
+
+    xhr.send(fd);
+    return false; // previene submit normale
+}
 </script>
 
 <?php require_once 'includes/footer.php'; ?>
