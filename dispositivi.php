@@ -23,7 +23,6 @@ try { $db->exec("ALTER TABLE dispositivi ADD COLUMN tipo_display TEXT DEFAULT 't
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN lon REAL DEFAULT NULL"); } catch(Exception $e) {}
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN reload_richiesto INTEGER DEFAULT 0"); } catch(Exception $e) {}
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN forza_adv INTEGER DEFAULT 0"); } catch(Exception $e) {}
-try { $db->exec("ALTER TABLE dispositivi ADD COLUMN loop_adv INTEGER DEFAULT 0"); } catch(Exception $e) {}
 try { $db->exec("CREATE TABLE IF NOT EXISTS pairing_pending (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     code TEXT UNIQUE NOT NULL,
@@ -78,9 +77,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $note       = trim($_POST['note'] ?? '');
         $lat        = $_POST['lat'] !== '' ? (float)$_POST['lat'] : null;
         $lon        = $_POST['lon'] !== '' ? (float)$_POST['lon'] : null;
-        $loop_adv = isset($_POST['loop_adv']) ? 1 : 0;
-        $db->prepare("UPDATE dispositivi SET nome=?,club=?,profilo_id=?,layout=?,sheet_url=?,stream_url=?,numero_tv=?,indirizzo=?,note=?,lat=?,lon=?,tipo_display='tv',loop_adv=? WHERE token=?")
-           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $stream_url, $numero_tv, $indirizzo, $note, $lat, $lon, $loop_adv, $tok]);
         header('Location: dispositivi.php'); exit;
     }
 
