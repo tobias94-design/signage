@@ -35,11 +35,17 @@ set /p TOKEN=<"%~dp0token.txt"
 set "DISPLAY_URL=https://pixelbridge.it/player/display.php?token=!TOKEN!"
 echo [OK] Token: !TOKEN! >> "%~dp0kiosk.log"
 echo [OK] URL: !DISPLAY_URL! >> "%~dp0kiosk.log"
-:: ── LOOP WATCHDOG CHROME ────────────────────────────────────
+:: ── NASCONDI TASKBAR ────────────────────────────────────────
+powershell -WindowStyle Hidden -Command "$ts = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3'; $v = (Get-ItemProperty -Path $ts).Settings; $v[8] = 3; Set-ItemProperty -Path $ts -Name Settings -Value $v; Stop-Process -Name explorer -Force" > nul 2>&1
+::  ── LOOP WATCHDOG CHROME ────────────────────────────────────
 :CHROME_LOOP
 echo [AVVIO] Chrome kiosk... >> "%~dp0kiosk.log"
 taskkill /f /im chrome.exe > nul 2>&1
 timeout /t 2 /nobreak > nul
+:: Pulizia lock Chrome per evitare crash profilo
+del /f /q "C:\PixelBridge\chrome_profile\SingletonLock" 2>nul
+del /f /q "C:\PixelBridge\chrome_profile\SingletonSocket" 2>nul
+del /f /q "C:\PixelBridge\chrome_profile\SingletonCookie" 2>nul
 start "" /wait "!CHROME!" --kiosk "!DISPLAY_URL!" ^
     --no-first-run ^
     --disable-infobars ^
