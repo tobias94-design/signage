@@ -112,6 +112,7 @@ const TOKEN     = '<?php echo htmlspecialchars($token); ?>';
 const CLUB      = '<?php echo htmlspecialchars($club); ?>';
 const BASE_URL  = '/';
 const SHEET_URL = '<?php echo htmlspecialchars($sheet_url); ?>';
+const LOOP_ADV  = <?php echo (int)($dispositivo['loop_adv'] ?? 0); ?>;
 
 const GIORNI_IT = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
 const MESI      = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
@@ -596,7 +597,11 @@ function mostraADV(stato) {
 function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
     if (idx >= contenuti.length) {
-        setTimeout(aggiornaDaAPI, 500);
+        if (LOOP_ADV) {
+            mostraContenuto(0); // loop ADV continuo
+        } else {
+            setTimeout(aggiornaDaAPI, 500);
+        }
         return;
     }
     indiceContenuto = idx;

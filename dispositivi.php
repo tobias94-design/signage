@@ -23,6 +23,7 @@ try { $db->exec("ALTER TABLE dispositivi ADD COLUMN tipo_display TEXT DEFAULT 't
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN lon REAL DEFAULT NULL"); } catch(Exception $e) {}
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN reload_richiesto INTEGER DEFAULT 0"); } catch(Exception $e) {}
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN forza_adv INTEGER DEFAULT 0"); } catch(Exception $e) {}
+try { $db->exec("ALTER TABLE dispositivi ADD COLUMN loop_adv INTEGER DEFAULT 0"); } catch(Exception $e) {}
 try { $db->exec("CREATE TABLE IF NOT EXISTS pairing_pending (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     code TEXT UNIQUE NOT NULL,
@@ -77,8 +78,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $note       = trim($_POST['note'] ?? '');
         $lat        = $_POST['lat'] !== '' ? (float)$_POST['lat'] : null;
         $lon        = $_POST['lon'] !== '' ? (float)$_POST['lon'] : null;
-        $db->prepare("UPDATE dispositivi SET nome=?,club=?,profilo_id=?,layout=?,sheet_url=?,stream_url=?,numero_tv=?,indirizzo=?,note=?,lat=?,lon=?,tipo_display='tv' WHERE token=?")
-           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $stream_url, $numero_tv, $indirizzo, $note, $lat, $lon, $tok]);
+        $loop_adv = isset($_POST['loop_adv']) ? 1 : 0;
+        $db->prepare("UPDATE dispositivi SET nome=?,club=?,profilo_id=?,layout=?,sheet_url=?,stream_url=?,numero_tv=?,indirizzo=?,note=?,lat=?,lon=?,tipo_display='tv',loop_adv=? WHERE token=?")
+           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $stream_url, $numero_tv, $indirizzo, $note, $lat, $lon, $loop_adv, $tok]);
         header('Location: dispositivi.php'); exit;
     }
 
@@ -341,6 +343,17 @@ require_once __DIR__ . '/includes/header.php';
                 <option value="<?= $p['id'] ?>" <?= ($dev['profilo_id']??'')==$p['id']?'selected':'' ?>><?= htmlspecialchars($p['nome']) ?></option>
                 <?php endforeach; ?>
             </select>
+            <?php endif; ?>
+
+            <?php if ($view === 'modifica'): ?>
+            <div style="margin-top:12px;display:flex;align-items:center;gap:10px;padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.07);">
+                <input type="checkbox" name="loop_adv" id="loop_adv" value="1"
+                       <?= !empty($dev['loop_adv']) ? 'checked' : '' ?>
+                       style="width:18px;height:18px;cursor:pointer;accent-color:#e85002;">
+                <label for="loop_adv" style="margin:0;cursor:pointer;font-size:13px;">
+                    🔁 <strong>Loop ADV continuo</strong> — la playlist riparte automaticamente senza tornare alla TV
+                </label>
+            </div>
             <?php endif; ?>
 
             <label>URL Google Sheet Corsi</label>
