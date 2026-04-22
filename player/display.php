@@ -145,10 +145,6 @@ var PRESETS = {
 // ── CACHE LOCALE ─────────────────────────────────────────────────
 const LOCAL_CACHE = 'http://127.0.0.1:8765/';
 async function urlContenuto(file) {
-    try {
-        const res = await fetch(LOCAL_CACHE + file, { method: 'HEAD', signal: AbortSignal.timeout(500) });
-        if (res.ok) return LOCAL_CACHE + file;
-    } catch(e) {}
     return BASE_URL + 'uploads/' + file;
 }
 
