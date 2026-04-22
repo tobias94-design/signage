@@ -141,10 +141,22 @@ var PRESETS = {
     'carbon':   'linear-gradient(135deg,#111 0%,#2a2a2a 100%)',
 };
 
+// ── CACHE LOCALE ─────────────────────────────────────────────────
+const LOCAL_CACHE = 'http://127.0.0.1:8765/';
+async function urlContenuto(file) {
+    try {
+        const res = await fetch(LOCAL_CACHE + file, { method: 'HEAD', signal: AbortSignal.timeout(500) });
+        if (res.ok) return LOCAL_CACHE + file;
+    } catch(e) {}
+    return BASE_URL + 'uploads/' + file;
+}
+
 // ── WATCHDOG — ricarica se il player si blocca per 2 minuti ──────
+// FIX: non ricarica durante ADV attivo
 let ultimoSuccesso = Date.now();
 function resetWatchdog() { ultimoSuccesso = Date.now(); }
 setInterval(() => {
+    if (modalitaAttuale === 'adv') return; // non interrompere ADV in corso
     if (Date.now() - ultimoSuccesso > 120000) {
         console.log('Watchdog: nessuna risposta da 2 minuti — ricarico...');
         location.reload();
@@ -593,24 +605,26 @@ function mostraContenuto(idx) {
     fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&log_contenuto=' + c.id + '&log_durata=' + durata).catch(() => {});
     const video    = document.getElementById('adv-video');
     const immagine = document.getElementById('adv-immagine');
-    const url = BASE_URL + 'uploads/' + c.file;
     const currentIdx = idx;
-    if (c.tipo === 'video') {
-        immagine.style.display = 'none'; video.style.display = 'block';
-        video.muted = true; video.volume = 0; video.defaultMuted = true;
-        video.setAttribute('muted', '');
-        video.onended = null;
-        video.src = url; video.load();
-        video.addEventListener('canplay', function h() {
-            video.removeEventListener('canplay', h); video.play().catch(() => {});
-        });
-        video.onended = () => mostraContenuto(currentIdx + 1);
-    } else {
-        video.pause(); video.src = ''; video.style.display = 'none';
-        immagine.style.display = 'block'; immagine.src = url;
-        if (advTimer) clearTimeout(advTimer);
-        advTimer = setTimeout(() => mostraContenuto(currentIdx + 1), (c.durata||10) * 1000);
-    }
+    // FIX: usa cache locale se disponibile, altrimenti server
+    urlContenuto(c.file).then(url => {
+        if (c.tipo === 'video') {
+            immagine.style.display = 'none'; video.style.display = 'block';
+            video.muted = true; video.volume = 0; video.defaultMuted = true;
+            video.setAttribute('muted', '');
+            video.onended = null;
+            video.src = url; video.load();
+            video.addEventListener('canplay', function h() {
+                video.removeEventListener('canplay', h); video.play().catch(() => {});
+            });
+            video.onended = () => mostraContenuto(currentIdx + 1);
+        } else {
+            video.pause(); video.src = ''; video.style.display = 'none';
+            immagine.style.display = 'block'; immagine.src = url;
+            if (advTimer) clearTimeout(advTimer);
+            advTimer = setTimeout(() => mostraContenuto(currentIdx + 1), (c.durata||10) * 1000);
+        }
+    });
 }
 
 // ── CORSI ────────────────────────────────────────────────────────

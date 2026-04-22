@@ -1,28 +1,29 @@
 #!/usr/bin/env python3
 """
-PixelBridge Agent - Windows
-Solo pairing + heartbeat + cache locale contenuti playlist.
+PixelBridge Agent - Windows v1.1.0
+Pairing + heartbeat + cache locale + server HTTP locale.
 Chrome viene lanciato dal bat.
 """
 
 import os, sys, json, time, random, socket, subprocess, threading
 import urllib.request, urllib.parse, shutil, tempfile
-import ssl
+import ssl, http.server, socketserver
 ssl._create_default_https_context = ssl._create_unverified_context
 
-VERSION     = '1.0.5'
+VERSION        = '1.1.0'
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-CONFIG_FILE     = os.path.join(BASE_DIR, 'config.json')
-CACHE_DIR       = os.path.join(BASE_DIR, 'cache')
-SERVER_URL      = 'https://pixelbridge.it'
-PING_INTERVAL   = 60
-CACHE_INTERVAL  = 300   # controlla cache ogni 5 minuti
+CONFIG_FILE    = os.path.join(BASE_DIR, 'config.json')
+CACHE_DIR      = os.path.join(BASE_DIR, 'cache')
+SERVER_URL     = 'https://pixelbridge.it'
+PING_INTERVAL  = 60
+CACHE_INTERVAL = 300
+LOCAL_PORT     = 8765
 PAIRING_TIMEOUT = 600
-APP_NAME        = 'PixelBridge'
+APP_NAME       = 'PixelBridge'
 
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -58,19 +59,36 @@ def log(msg):
             f.write(line + '\n')
     except: pass
 
-# ── CACHE LOCALE ──────────────────────────────────────────────────
+# ── SERVER HTTP LOCALE PER CACHE ─────────────────────────────
+class CacheHandler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=CACHE_DIR, **kwargs)
+    def log_message(self, format, *args):
+        pass  # silenzioso
+
+def avvia_server_locale():
+    try:
+        socketserver.TCPServer.allow_reuse_address = True
+        httpd = socketserver.TCPServer(('127.0.0.1', LOCAL_PORT), CacheHandler)
+        log(f"Server cache locale avviato su http://127.0.0.1:{LOCAL_PORT}")
+        httpd.serve_forever()
+    except Exception as e:
+        log(f"Server locale errore: {e}")
+
+# ── CACHE LOCALE ──────────────────────────────────────────────
 def aggiorna_cache(token):
-    """Scarica i contenuti della playlist del dispositivo in locale."""
     log("Cache: controllo contenuti da scaricare...")
     res = api_get(f'/api/playlist_cache.php?token={urllib.parse.quote(token)}')
+
+    # FIX: se API fallisce NON cancellare la cache esistente
     if not res.get('ok'):
-        log(f"Cache: errore API — {res.get('error','')}")
+        log(f"Cache: API non raggiungibile — cache locale mantenuta")
         return
 
     files_server = res.get('files', [])
     nomi_server  = {f['file'] for f in files_server}
 
-    # Cancella file non più in playlist
+    # Cancella file non più in playlist (solo se API OK)
     for fname in os.listdir(CACHE_DIR):
         if fname not in nomi_server:
             try:
@@ -78,33 +96,52 @@ def aggiorna_cache(token):
                 log(f"Cache: rimosso {fname}")
             except: pass
 
-    # Scarica file mancanti
+    # Scarica file mancanti con verifica dimensione
     for f in files_server:
         dest = os.path.join(CACHE_DIR, f['file'])
-        if os.path.exists(dest):
-            continue  # già in cache
+        if os.path.exists(dest) and os.path.getsize(dest) > 0:
+            continue
         url = SERVER_URL + f['url']
-        log(f"Cache: scarico {f['nome']} ({f['file']})...")
+        log(f"Cache: scarico {f['nome']}...")
+        tmp_dest = dest + '.tmp'
         try:
             req = urllib.request.Request(url, headers={'User-Agent': f'PixelBridge-Agent/{VERSION}'})
-            with urllib.request.urlopen(req, timeout=120) as r, open(dest, 'wb') as out:
-                shutil.copyfileobj(r, out)
-            log(f"Cache: {f['nome']} scaricato OK")
+            with urllib.request.urlopen(req, timeout=120) as r:
+                content_length = r.headers.get('Content-Length')
+                with open(tmp_dest, 'wb') as out:
+                    shutil.copyfileobj(r, out)
+
+            downloaded_size = os.path.getsize(tmp_dest)
+
+            # FIX: verifica dimensione
+            if content_length and downloaded_size != int(content_length):
+                log(f"Cache: {f['nome']} dimensione errata — riprovo dopo")
+                os.remove(tmp_dest)
+                continue
+
+            if downloaded_size == 0:
+                log(f"Cache: {f['nome']} file vuoto — scarto")
+                os.remove(tmp_dest)
+                continue
+
+            shutil.move(tmp_dest, dest)
+            log(f"Cache: {f['nome']} OK ({downloaded_size} bytes)")
+
         except Exception as e:
             log(f"Cache: errore download {f['nome']} — {e}")
-            try: os.remove(dest)
+            try:
+                if os.path.exists(tmp_dest): os.remove(tmp_dest)
             except: pass
 
 def cache_loop(token):
-    """Loop che aggiorna la cache ogni CACHE_INTERVAL secondi."""
+    try: aggiorna_cache(token)
+    except Exception as e: log(f"Cache errore: {e}")
     while True:
-        try:
-            aggiorna_cache(token)
-        except Exception as e:
-            log(f"Cache loop errore: {e}")
         time.sleep(CACHE_INTERVAL)
+        try: aggiorna_cache(token)
+        except Exception as e: log(f"Cache errore: {e}")
 
-# ── AUTO-UPDATE ───────────────────────────────────────────────────
+# ── AUTO-UPDATE ───────────────────────────────────────────────
 def controlla_aggiornamento():
     try:
         res = api_get('/api/version.php')
@@ -112,6 +149,14 @@ def controlla_aggiornamento():
         server_ver = res['version'].strip()
         log(f"Versione locale: {VERSION} | Server: {server_ver}")
         if server_ver == VERSION: return False
+        # FIX: non scaricare versioni più vecchie
+        try:
+            local_parts  = [int(x) for x in VERSION.split('.')]
+            server_parts = [int(x) for x in server_ver.split('.')]
+            if server_parts <= local_parts:
+                log("Versione server non più recente — skip")
+                return False
+        except: pass
         download_url = res.get('download', '')
         if not download_url: return False
         log(f"Aggiornamento disponibile: {server_ver}")
@@ -128,19 +173,6 @@ def controlla_aggiornamento():
     except Exception as e:
         log(f"Errore auto-update: {e}")
         return False
-
-def installa_autostart():
-    try:
-        import winreg
-        exe_path = os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__)
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                             r'Software\Microsoft\Windows\CurrentVersion\Run',
-                             0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, f'"{exe_path}"')
-        winreg.CloseKey(key)
-        log("Autostart registrato")
-    except Exception as e:
-        log(f"Autostart: {e}")
 
 def ping_server(token):
     api_get(f'/api/stato.php?token={urllib.parse.quote(token)}&t={int(time.time())}')
@@ -187,33 +219,40 @@ def close_screen():
         except: pass
         _pairing_window = None
 
+# FIX: do_pairing iterativo invece di ricorsivo (evita stack overflow)
 def do_pairing():
-    code    = str(random.randint(100000, 999999))
-    machine = get_machine_name()
-    log(f"Pairing: codice {code} per {machine}")
-    res = api_get(f'/api/claim.php?action=register&code={code}&machine={urllib.parse.quote(machine)}')
-    if not res.get('ok'):
-        log(f"Errore registrazione — riprovo tra 30s")
-        time.sleep(30)
-        return do_pairing()
-    threading.Thread(target=show_screen, kwargs={'code': code}, daemon=True).start()
-    deadline = time.time() + PAIRING_TIMEOUT
-    while time.time() < deadline:
-        time.sleep(5)
-        res = api_get(f'/api/claim.php?action=check&code={code}')
-        if res.get('status') == 'claimed' and res.get('token'):
-            token = res['token']
-            log(f"Pairing OK! Token: {token}")
-            close_screen()
-            cfg = load_config()
-            cfg.update({'token': token, 'paired_at': time.strftime('%Y-%m-%d %H:%M:%S'), 'machine': machine})
-            save_config(cfg)
-            return token
-        elif res.get('status') == 'expired':
-            close_screen()
-            return do_pairing()
-    close_screen()
-    return do_pairing()
+    while True:
+        code    = str(random.randint(100000, 999999))
+        machine = get_machine_name()
+        log(f"Pairing: codice {code} per {machine}")
+        res = api_get(f'/api/claim.php?action=register&code={code}&machine={urllib.parse.quote(machine)}')
+        if not res.get('ok'):
+            log(f"Errore registrazione — riprovo tra 30s")
+            time.sleep(30)
+            continue
+
+        threading.Thread(target=show_screen, kwargs={'code': code}, daemon=True).start()
+
+        deadline = time.time() + PAIRING_TIMEOUT
+        paired_token = None
+        while time.time() < deadline:
+            time.sleep(5)
+            res = api_get(f'/api/claim.php?action=check&code={code}')
+            if res.get('status') == 'claimed' and res.get('token'):
+                paired_token = res['token']
+                log(f"Pairing OK! Token: {paired_token}")
+                close_screen()
+                cfg = load_config()
+                cfg.update({'token': paired_token, 'paired_at': time.strftime('%Y-%m-%d %H:%M:%S'), 'machine': machine})
+                save_config(cfg)
+                break
+            elif res.get('status') == 'expired':
+                break
+
+        close_screen()
+        if paired_token:
+            return paired_token
+        log("Pairing scaduto — riprovo")
 
 def ping_loop(token):
     while True:
@@ -225,23 +264,29 @@ def main():
     log(f"=== PixelBridge Agent v{VERSION} ===")
     log(f"Server: {SERVER_URL} | Macchina: {get_machine_name()}")
     log(f"Cache dir: {CACHE_DIR}")
-    installa_autostart()
+
     controlla_aggiornamento()
+
     cfg   = load_config()
     token = cfg.get('token')
     if not token:
         log("Nessun token — avvio pairing")
         token = do_pairing()
-    log(f"Token: {token} — avvio heartbeat e cache")
+
+    log(f"Token: {token} — avvio servizi")
+
     token_file = os.path.join(BASE_DIR, 'token.txt')
     with open(token_file, 'w') as f:
         f.write(token)
-    log(f"Token salvato in token.txt")
+    log("Token salvato in token.txt")
 
-    # Avvia cache in background
+    # Server HTTP locale per servire cache a Chrome
+    threading.Thread(target=avvia_server_locale, daemon=True).start()
+
+    # Cache in background
     threading.Thread(target=cache_loop, args=(token,), daemon=True).start()
 
-    # Heartbeat loop
+    # Heartbeat
     ping_loop(token)
 
 if __name__ == '__main__':
