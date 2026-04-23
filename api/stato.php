@@ -25,8 +25,9 @@ if (!$token) { echo json_encode(['errore' => 'Token mancante']); exit; }
 
 $cache_file = __DIR__ . '/../cache/stato-' . preg_replace('/[^a-z0-9\-]/', '', $token) . '.json';
 
+// Migrazioni
 try { $db->exec("ALTER TABLE dispositivi ADD COLUMN forza_adv INTEGER DEFAULT 0"); } catch(Exception $e) {}
-try { $db->exec("ALTER TABLE dispositivi ADD COLUMN loop_adv INTEGER DEFAULT 0"); } catch(Exception $e) {}
+try { $db->exec("ALTER TABLE dispositivi ADD COLUMN notifica_offline_inviata INTEGER DEFAULT 0"); } catch(Exception $e) {}
 
 $stmt = $db->prepare('SELECT * FROM dispositivi WHERE token = ?');
 $stmt->execute([$token]);
@@ -34,10 +35,9 @@ $dispositivo = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$dispositivo) { echo json_encode(['errore' => 'Dispositivo non trovato']); exit; }
 
-$db->prepare('UPDATE dispositivi SET stato = ?, ultimo_ping = CURRENT_TIMESTAMP WHERE token = ?')
+// Aggiorna ping e resetta notifica offline
+$db->prepare('UPDATE dispositivi SET stato=?, ultimo_ping=CURRENT_TIMESTAMP, notifica_offline_inviata=0 WHERE token=?')
    ->execute(['online', $token]);
-$db->prepare('UPDATE dispositivi SET notifica_offline_inviata=0 WHERE token=?')->execute([$token]);
-$loop_adv = (bool)($dispositivo['loop_adv'] ?? false);
 
 $reload = false;
 try {
@@ -62,7 +62,7 @@ if (!empty($_GET['log_contenuto'])) {
 }
 
 if (!$dispositivo['profilo_id']) {
-    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'loop_adv' => $loop_adv, 'banner' => getBanner($db), 'sidebar_slides' => []];
+    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'banner' => getBanner($db), 'sidebar_slides' => []];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
 }
@@ -97,7 +97,7 @@ try {
 }
 
 if (!$regola_base) {
-    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'loop_adv' => $loop_adv, 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
+    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
                  'sidebar_slides' => getSidebarSlides($db, $profilo['id'], $token)];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
@@ -129,7 +129,7 @@ $contenuti_evento = $evento_attivo ? getContenutiPlaylist($db, $evento_attivo['p
 $contenuti_tutti  = array_values(array_merge($contenuti_base, $contenuti_evento));
 
 if (empty($contenuti_tutti)) {
-    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'loop_adv' => $loop_adv, 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
+    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'banner' => getBanner($db, $profilo), 'profilo' => $profilo['nome'],
                  'sidebar_slides' => getSidebarSlides($db, $profilo['id'], $token)];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
@@ -172,7 +172,6 @@ if ($forza_adv || $posizione_ciclo >= $intervallo_sec) {
     $risposta = [
         'modalita'        => 'adv',
         'reload'          => $reload,
-        'loop_adv'        => $loop_adv,
         'forza_adv'       => $forza_adv,
         'playlist_nome'   => $regola_base['playlist_nome'] . ($evento_attivo ? ' + ' . $evento_attivo['nome'] : ''),
         'contenuti'       => $contenuti_tutti,
@@ -190,7 +189,6 @@ if ($forza_adv || $posizione_ciclo >= $intervallo_sec) {
     $risposta = [
         'modalita'         => 'tv',
         'reload'           => $reload,
-        'loop_adv'         => $loop_adv,
         'secondi_alla_adv' => $secondi_alla_adv,
         'banner'           => getBanner($db, $profilo),
         'profilo'          => $profilo['nome'],
