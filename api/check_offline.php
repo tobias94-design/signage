@@ -14,17 +14,7 @@ $EMAIL_FROM_NAME = 'PixelBridge';
 
 $db = getDB();
 
-// Migrazione tabella notifiche
-try {
-    $db->exec("CREATE TABLE IF NOT EXISTS notifiche_offline (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        dispositivo_token TEXT NOT NULL,
-        inviata_il DATETIME DEFAULT CURRENT_TIMESTAMP
-    )");
-} catch(Exception $e) {}
-
 // Trova dispositivi offline da più di X minuti
-// NON filtra per stato — lo stato viene gestito solo da stato.php
 $dispositivi_offline = $db->query("
     SELECT token, nome, club, ultimo_ping
     FROM dispositivi
@@ -33,16 +23,13 @@ $dispositivi_offline = $db->query("
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 foreach ($dispositivi_offline as $d) {
-    // Controlla se abbiamo già inviato una notifica nelle ultime 2 ore
-    $già_notificato = $db->query("
-        SELECT COUNT(*) FROM notifiche_offline
-        WHERE dispositivo_token = " . $db->quote($d['token']) . "
-        AND inviata_il > datetime('now', '-2 hours')
-    ")->fetchColumn();
+    // FIX: controlla flag nel DB — resettato da stato.php quando torna online
+    $già_notificato = (bool)$db->query("
+        SELECT notifica_offline_inviata FROM dispositivi WHERE token=" . $db->quote($d['token'])
+    )->fetchColumn();
 
     if ($già_notificato) continue;
 
-    // Invia email
     $minuti_off = round((time() - strtotime($d['ultimo_ping'])) / 60);
     $nome_disp  = $d['nome'] . ($d['club'] ? ' (' . $d['club'] . ')' : '');
     $ultimo     = $d['ultimo_ping'] ? date('d/m/Y H:i', strtotime($d['ultimo_ping'])) : '—';
@@ -84,7 +71,8 @@ foreach ($dispositivi_offline as $d) {
     curl_close($ch);
 
     if ($http_code === 202) {
-        $db->prepare("INSERT INTO notifiche_offline (dispositivo_token) VALUES (?)")->execute([$d['token']]);
+        // FIX: setta flag SOLO dopo invio riuscito
+        $db->prepare("UPDATE dispositivi SET notifica_offline_inviata=1 WHERE token=?")->execute([$d['token']]);
         echo "[OK] Notifica inviata per {$nome_disp}\n";
     } else {
         echo "[ERRORE] Invio fallito per {$nome_disp} — HTTP {$http_code}: {$response}\n";
