@@ -98,6 +98,9 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
         <video id="adv-video" preload="auto" muted playsinline autoplay></video>
         <img id="adv-immagine" src="">
     </div>
+    <div id="layer-offline" style="display:none;position:absolute;top:0;left:0;width:1920px;height:1080px;background:#000;z-index:50;align-items:center;justify-content:center;">
+        <img src="/assets/img/tv_screen.jpg" style="max-width:1920px;max-height:1080px;width:100%;height:100%;object-fit:contain;">
+    </div>
     <div id="layer-banner">
         <div id="banner-logo-wrap"><img id="banner-logo" src=""></div>
         <div class="banner-sep"></div>
@@ -113,6 +116,8 @@ const CLUB      = '<?php echo htmlspecialchars($club); ?>';
 const BASE_URL  = '/';
 const SHEET_URL = '<?php echo htmlspecialchars($sheet_url); ?>';
 
+    el.innerHTML = msg;
+}
 
 const GIORNI_IT = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
 const MESI      = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
@@ -121,6 +126,17 @@ let statoCorrente = null, advTimer = null, indiceContenuto = 0;
 let contenuti = [], corsiOggi = [];
 let bannerColore = '#000000', bannerTestoColore = '#ffffff';
 let modalitaAttuale = 'tv';
+let erroriConsecutivi = 0;
+const MAX_ERRORI_OFFLINE = 3;
+
+function mostraSchermataOffline() {
+    const el = document.getElementById('layer-offline');
+    if (el) el.style.display = 'flex';
+}
+function nascondiSchermataOffline() {
+    const el = document.getElementById('layer-offline');
+    if (el) el.style.display = 'none';
+}
 
 let sidebarSlides = [];
 let sidebarIndice = 0;
@@ -142,13 +158,8 @@ var PRESETS = {
     'carbon':   'linear-gradient(135deg,#111 0%,#2a2a2a 100%)',
 };
 
-// ── CACHE LOCALE ─────────────────────────────────────────────────
-const LOCAL_CACHE = 'http://127.0.0.1:8765/';
+// ── URL CONTENUTO ────────────────────────────────────────────────
 async function urlContenuto(file) {
-    try {
-        const res = await fetch(LOCAL_CACHE + file, { method: 'HEAD', signal: AbortSignal.timeout(500) });
-        if (res.ok) return LOCAL_CACHE + file;
-    } catch(e) {}
     return BASE_URL + 'uploads/' + file;
 }
 
@@ -601,12 +612,7 @@ function mostraADV(stato) {
 function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
     if (idx >= contenuti.length) {
-        if (statoCorrente && statoCorrente.loop_adv) {
-            if (advTimer) { clearTimeout(advTimer); advTimer = null; }
-            mostraContenuto(0);
-        } else {
-            setTimeout(aggiornaDaAPI, 500);
-        }
+        setTimeout(aggiornaDaAPI, 500);
         return;
     }
     indiceContenuto = idx;
@@ -670,6 +676,8 @@ async function aggiornaDaAPI() {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const stato = await res.json();
         resetWatchdog();
+        erroriConsecutivi = 0;
+        nascondiSchermataOffline();
 
         if (stato.errore) { setTimeout(aggiornaDaAPI, 15000); return; }
 
@@ -711,7 +719,12 @@ async function aggiornaDaAPI() {
         }
         statoCorrente = stato;
     } catch(e) {
+        erroriConsecutivi++;
+        if (erroriConsecutivi >= MAX_ERRORI_OFFLINE) {
+            mostraSchermataOffline();
+        }
         setTimeout(aggiornaDaAPI, 15000);
+        return;
     }
 }
 
