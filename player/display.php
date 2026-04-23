@@ -98,7 +98,7 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
         <video id="adv-video" preload="auto" muted playsinline autoplay></video>
         <img id="adv-immagine" src="">
     </div>
-    <div id="layer-offline" style="display:none;position:absolute;top:0;left:0;width:1920px;height:1080px;background:#000;z-index:50;align-items:center;justify-content:center;">
+    <div id="layer-offline" style="display:none;position:absolute;top:0;left:0;width:1920px;height:1080px;background:#fff;z-index:50;align-items:center;justify-content:center;">
         <img src="/assets/img/tv_screen.svg" style="max-width:1920px;max-height:1080px;width:100%;height:100%;object-fit:contain;">
     </div>
     <div id="layer-banner">
