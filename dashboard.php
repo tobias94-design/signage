@@ -118,7 +118,7 @@ require_once __DIR__ . '/includes/header.php';
             <div class="si"><div class="si-info"><div class="si-name" style="color:var(--sg-muted);">Nessun dispositivo</div></div></div>
         <?php else: foreach ($dispositivi as $d):
             $is_on = $d['stato']==='online';
-            $ping = !empty($d['ultimo_ping']) ? date('H:i',strtotime($d['ultimo_ping'])) : '—';
+            $ping = !empty($d['ultimo_ping']) ? date('H:i',strtotime($d['ultimo_ping']) + 7200) : '—';
             $num_tv = (int)($d['numero_tv'] ?? 0);
         ?>
             <div class="si">
