@@ -36,7 +36,7 @@ $dispositivo = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$dispositivo) { echo json_encode(['errore' => 'Dispositivo non trovato']); exit; }
 
 // Aggiorna ping e resetta notifica offline
-$db->prepare('UPDATE dispositivi SET stato=?, ultimo_ping=CURRENT_TIMESTAMP, notifica_offline_inviata=0 WHERE token=?')
+$db->prepare('UPDATE dispositivi SET stato=?, ultimo_ping=datetime('now', '+2 hours'), notifica_offline_inviata=0 WHERE token=?')
    ->execute(['online', $token]);
 
 $reload = false;
