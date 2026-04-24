@@ -191,7 +191,7 @@ require_once __DIR__ . '/includes/header.php';
         <tbody id="table-body">
         <?php foreach ($dispositivi as $d):
             $is_on = !empty($d['ultimo_ping']) && strtotime($d['ultimo_ping']) > time() - 120;
-            $ping  = !empty($d['ultimo_ping']) ? date('d/m H:i', strtotime($d['ultimo_ping'])) : '—';
+            $ping  = !empty($d['ultimo_ping']) ? date('d/m H:i', strtotime($d['ultimo_ping']) + 7200) : '—';
             $playerUrl = 'player/display.php?token='.$d['token'];
         ?>
         <tr class="dev-row" data-search="<?= strtolower(htmlspecialchars($d['nome'].' '.$d['club'].' '.$d['token'])) ?>"
@@ -245,7 +245,7 @@ require_once __DIR__ . '/includes/header.php';
 <div id="vista-card" style="display:none;">
     <?php foreach ($dispositivi as $d):
         $is_on = !empty($d['ultimo_ping']) && strtotime($d['ultimo_ping']) > time() - 120;
-        $ping  = !empty($d['ultimo_ping']) ? date('H:i', strtotime($d['ultimo_ping'])) : '—';
+        $ping  = !empty($d['ultimo_ping']) ? date('H:i', strtotime($d['ultimo_ping']) + 7200) : '—';
         $playerUrl = 'player/display.php?token='.$d['token'];
     ?>
     <div class="dev-row box" data-search="<?= strtolower(htmlspecialchars($d['nome'].' '.$d['club'].' '.$d['token'])) ?>"
