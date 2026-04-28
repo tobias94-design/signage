@@ -705,6 +705,7 @@ async function aggiornaDaAPI() {
         const streamCambiato = statoCorrente && statoCorrente.stream_url !== stato.stream_url;
 
         if (stato.modalita === 'tv') {
+            if (modalitaAttuale === 'adv') { statoCorrente = stato; setTimeout(aggiornaDaAPI, 30000); return; }
             if (cambiata || streamCambiato) {
                 mostraTV();
                 if (streamCambiato || !statoCorrente) {
