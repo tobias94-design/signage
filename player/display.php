@@ -98,7 +98,7 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
         <video id="adv-video" preload="auto" muted playsinline autoplay></video>
         <img id="adv-immagine" src="">
     </div>
-    <div id="layer-offline" style="display:none;position:absolute;top:0;left:0;width:1920px;height:1080px;background:#fff;z-index:50;align-items:center;justify-content:center;">
+    <div id="layer-offline" style="display:none;position:absolute;top:0;left:0;width:1920px;height:1080px;background:#000;z-index:50;align-items:center;justify-content:center;">
         <img src="/assets/img/tv_screen.svg" style="max-width:1920px;max-height:1080px;width:100%;height:100%;object-fit:contain;">
     </div>
     <div id="layer-banner">
@@ -627,10 +627,13 @@ function mostraContenuto(idx) {
             video.muted = true; video.volume = 0; video.defaultMuted = true;
             video.setAttribute('muted', '');
             video.onended = null;
-            video.src = url; video.load();
-            video.addEventListener('canplay', function h() {
-                video.removeEventListener('canplay', h); video.play().catch(() => {});
-            });
+            video.oncanplay = null;
+            video.src = url;
+            video.load();
+            video.oncanplay = function() {
+                video.oncanplay = null;
+                video.play().catch(e => console.log('play error:', e));
+            };
             video.onended = () => mostraContenuto(currentIdx + 1);
         } else {
             video.pause(); video.src = ''; video.style.display = 'none';
