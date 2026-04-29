@@ -124,6 +124,7 @@ let statoCorrente = null, advTimer = null, indiceContenuto = 0;
 let contenuti = [], corsiOggi = [];
 let bannerColore = '#000000', bannerTestoColore = '#ffffff';
 let modalitaAttuale = 'tv';
+let advTerminato = false;
 let erroriConsecutivi = 0;
 const MAX_ERRORI_OFFLINE = 3;
 
@@ -610,6 +611,7 @@ function mostraADV(stato) {
 function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
     if (idx >= contenuti.length) {
+        advTerminato = true;
         setTimeout(aggiornaDaAPI, 500);
         return;
     }
@@ -705,7 +707,13 @@ async function aggiornaDaAPI() {
         const streamCambiato = statoCorrente && statoCorrente.stream_url !== stato.stream_url;
 
         if (stato.modalita === 'tv') {
-            if (modalitaAttuale === 'adv') { statoCorrente = stato; setTimeout(aggiornaDaAPI, 30000); return; }
+            if (modalitaAttuale === 'adv' && !advTerminato) {
+                // ADV in corso — non interrompere, ricontrolla tra 30s
+                statoCorrente = stato;
+                setTimeout(aggiornaDaAPI, 30000);
+                return;
+            }
+            advTerminato = false;
             if (cambiata || streamCambiato) {
                 mostraTV();
                 if (streamCambiato || !statoCorrente) {
