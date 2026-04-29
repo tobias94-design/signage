@@ -713,8 +713,9 @@ async function aggiornaDaAPI() {
                 setTimeout(aggiornaDaAPI, 30000);
                 return;
             }
+            const eraAdvTerminato = advTerminato;
             advTerminato = false;
-            if (cambiata || streamCambiato) {
+            if (cambiata || streamCambiato || eraAdvTerminato) {
                 mostraTV();
                 if (streamCambiato || !statoCorrente) {
                     const v = document.getElementById('tv-video');
