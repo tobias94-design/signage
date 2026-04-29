@@ -612,7 +612,8 @@ function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
     if (idx >= contenuti.length) {
         advTerminato = true;
-        setTimeout(aggiornaDaAPI, 500);
+        mostraTV();
+        setTimeout(aggiornaDaAPI, 1000);
         return;
     }
     indiceContenuto = idx;
