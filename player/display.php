@@ -125,6 +125,8 @@ let contenuti = [], corsiOggi = [];
 let bannerColore = '#000000', bannerTestoColore = '#ffffff';
 let modalitaAttuale = 'tv';
 let advTerminato = false;
+let ultimaFineAdv = 0;
+const COOLDOWN_ADV_MS = 60000;
 let erroriConsecutivi = 0;
 const MAX_ERRORI_OFFLINE = 3;
 
@@ -612,6 +614,7 @@ function mostraContenuto(idx) {
     if (!contenuti.length) { mostraTV(); return; }
     if (idx >= contenuti.length) {
         advTerminato = true;
+        ultimaFineAdv = Date.now();
         mostraTV();
         setTimeout(aggiornaDaAPI, 1000);
         return;
@@ -726,7 +729,7 @@ async function aggiornaDaAPI() {
             }
             setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_adv || 30) * 1000, 30000));
         } else if (stato.modalita === 'adv') {
-            if (cambiata) mostraADV(stato);
+            if (cambiata && Date.now() - ultimaFineAdv > COOLDOWN_ADV_MS) mostraADV(stato);
             setTimeout(aggiornaDaAPI, Math.min((stato.secondi_alla_tv || 60) * 1000, 30000));
         }
         statoCorrente = stato;
