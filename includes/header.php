@@ -11,6 +11,7 @@ $titolo = $titolo ?? 'Signage Manager';
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/css/style-glass.css">
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 <div class="sg-blob sg-b1"></div>
