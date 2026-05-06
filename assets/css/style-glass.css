@@ -2603,4 +2603,126 @@ details[open] > summary { color: var(--sg-orange); }
   background: rgba(255,69,58,0.10);
   border: 1px solid rgba(255,69,58,0.20);
   color: var(--sg-red);
+}/* ══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — PixelBridge
+══════════════════════════════════════════════════════════════ */
+
+/* ── HAMBURGER BUTTON (solo mobile) ─────────────────────── */
+.mob-hamburger {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    width: 36px;
+    height: 36px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+}
+.mob-hamburger span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    background: var(--sg-white);
+    border-radius: 2px;
+    transition: all 0.2s;
+}
+.mob-hamburger:hover { background: rgba(255,255,255,0.10); }
+
+/* ── OVERLAY MOBILE ─────────────────────────────────────── */
+.mob-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    z-index: 49;
+    opacity: 0;
+    transition: opacity 0.25s;
+}
+.mob-overlay.mob-overlay-visible {
+    opacity: 1;
+}
+
+/* ── MOBILE BREAKPOINT ──────────────────────────────────── */
+@media (max-width: 768px) {
+    /* Mostra hamburger */
+    .mob-hamburger { display: flex; }
+    .mob-overlay { display: block; }
+
+    /* Nascondi topbar-div e elementi non essenziali */
+    .topbar-div { display: none; }
+    .topbar-kpis { display: none; }
+    .topbar-status { display: none; }
+    .topbar-clock { display: none; }
+    .topbar-page { font-size: 14px; }
+    .topbar { padding: 0 12px; gap: 10px; }
+
+    /* Sidebar: nascosta di default, slide-in da sinistra */
+    .sidebar {
+        position: fixed !important;
+        left: 0; top: 0; bottom: 0;
+        width: 260px !important;
+        z-index: 50;
+        transform: translateX(-100%);
+        transition: transform 0.28s cubic-bezier(0.4,0,0.2,1) !important;
+        padding-top: 16px;
+        border-right: 1px solid rgba(255,255,255,0.10);
+        background: rgba(12,10,9,0.96) !important;
+    }
+    .sidebar.mob-open {
+        transform: translateX(0);
+    }
+    /* Sul mobile la sidebar mostra sempre le label */
+    .sidebar .sb-label { opacity: 1 !important; width: auto !important; }
+    .sidebar .sb-section { opacity: 1 !important; max-height: 40px !important; padding: 14px 10px 5px !important; }
+    .sidebar .sb-badge { opacity: 1 !important; width: auto !important; min-width: 17px !important; }
+    .sidebar .sb-item { padding: 11px 14px; font-size: 14px; }
+    .sidebar .sb-icon { font-size: 18px; width: 24px; }
+    .sidebar .sb-toggle { display: none; }
+
+    /* Content: padding ridotto */
+    .container { padding: 14px 12px 80px; }
+    .sg-content { overflow-x: hidden; }
+
+    /* Statusbar semplificata */
+    .statusbar { padding: 0 12px; }
+    .sb-item { display: none; }
+    .sb-brand { display: none; }
+    .sb-ticker { max-width: 100%; margin-left: 0; }
+
+    /* Tables scrollabili */
+    .box { overflow-x: auto; padding: 14px 12px; }
+    table { min-width: 500px; }
+    .box > table { min-width: 500px; }
+
+    /* Form grid 1 colonna */
+    .form-grid { grid-template-columns: 1fr !important; }
+    [style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+
+    /* Dashboard widget grid */
+    .wgrid { grid-template-columns: 1fr !important; padding: 12px; }
+    .w-2, .w-3, .w-r2 { grid-column: span 1 !important; grid-row: span 1 !important; }
+
+    /* Cards */
+    .cards { grid-template-columns: 1fr 1fr !important; }
+
+    /* Bottoni azioni — più grandi su mobile */
+    .btn { padding: 10px 16px; }
+    .btn-sm { padding: 7px 12px; font-size: 12px; }
+
+    /* Azioni inline — wrap */
+    div[style*="display:flex;gap"] { flex-wrap: wrap !important; }
+
+    /* Body non scrollabile quando sidebar aperta */
+    body.mob-sidebar-open { overflow: hidden; }
+}
+
+@media (max-width: 480px) {
+    .cards { grid-template-columns: 1fr !important; }
+    .topbar img { height: 20px !important; }
 }

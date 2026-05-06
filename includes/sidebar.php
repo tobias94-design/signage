@@ -34,7 +34,7 @@ $voci = [
         if ($voce['sezione'] !== 'principale') continue;
         $attiva = ($pagina_corrente === $file) ? 'active' : '';
     ?>
-    <a href="/<?= $file ?>" class="sb-item <?= $attiva ?>">
+    <a href="/<?= $file ?>" class="sb-item <?= $attiva ?>" onclick="closeMobileSidebar()">
         <span class="sb-icon"><?= $voce['icona'] ?></span>
         <span class="sb-label"><?= $voce['label'] ?></span>
         <?php if (!empty($voce['badge'])): ?>
@@ -49,7 +49,7 @@ $voci = [
         if (!empty($voce['admin_only']) && !isAdmin()) continue;
         $attiva = ($pagina_corrente === $file) ? 'active' : '';
     ?>
-    <a href="/<?= $file ?>" class="sb-item <?= $attiva ?>">
+    <a href="/<?= $file ?>" class="sb-item <?= $attiva ?>" onclick="closeMobileSidebar()">
         <span class="sb-icon"><?= $voce['icona'] ?></span>
         <span class="sb-label"><?= $voce['label'] ?></span>
     </a>
@@ -60,7 +60,7 @@ $voci = [
         if ($voce['sezione'] !== 'adv') continue;
         $attiva = ($pagina_corrente === $file) ? 'active' : '';
     ?>
-    <a href="/<?= $file ?>" class="sb-item <?= $attiva ?>">
+    <a href="/<?= $file ?>" class="sb-item <?= $attiva ?>" onclick="closeMobileSidebar()">
         <span class="sb-icon"><?= $voce['icona'] ?></span>
         <span class="sb-label"><?= $voce['label'] ?></span>
     </a>
@@ -68,7 +68,7 @@ $voci = [
 
     <!-- Profilo utente in fondo -->
     <div class="sb-btm">
-        <a href="/profilo.php" class="sb-item <?= $pagina_corrente==='profilo.php'?'active':'' ?>">
+        <a href="/profilo.php" class="sb-item <?= $pagina_corrente==='profilo.php'?'active':'' ?>" onclick="closeMobileSidebar()">
             <span class="sb-icon" style="font-size:13px;font-weight:800;color:<?= ($me['ruolo']??'')==='admin'?'var(--sg-orange)':'var(--sg-muted)' ?>;">
                 <?= strtoupper(substr($me['nome']??'?',0,1)) ?>
             </span>
@@ -83,15 +83,40 @@ $voci = [
 </nav>
 
 <script>
+// Desktop toggle
 function toggleSidebar() {
     const sb = document.getElementById('sg-sidebar');
+    if (window.innerWidth <= 768) {
+        toggleMobileSidebar();
+        return;
+    }
     sb.classList.toggle('collapsed');
     const collapsed = sb.classList.contains('collapsed');
     localStorage.setItem('sb_collapsed', collapsed ? '1' : '0');
     document.getElementById('sb-toggle').title = collapsed ? 'Espandi sidebar' : 'Comprimi sidebar';
 }
+
+// Mobile overlay
+function toggleMobileSidebar() {
+    const sb = document.getElementById('sg-sidebar');
+    const overlay = document.getElementById('mob-overlay');
+    sb.classList.toggle('mob-open');
+    overlay.classList.toggle('mob-overlay-visible');
+    document.body.classList.toggle('mob-sidebar-open');
+}
+
+function closeMobileSidebar() {
+    if (window.innerWidth > 768) return;
+    const sb = document.getElementById('sg-sidebar');
+    const overlay = document.getElementById('mob-overlay');
+    sb.classList.remove('mob-open');
+    overlay.classList.remove('mob-overlay-visible');
+    document.body.classList.remove('mob-sidebar-open');
+}
+
+// Init desktop collapsed state
 (function() {
-    if (localStorage.getItem('sb_collapsed') === '1') {
+    if (window.innerWidth > 768 && localStorage.getItem('sb_collapsed') === '1') {
         document.getElementById('sg-sidebar').classList.add('collapsed');
     }
 })();
