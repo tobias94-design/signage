@@ -2726,3 +2726,31 @@ details[open] > summary { color: var(--sg-orange); }
     .cards { grid-template-columns: 1fr !important; }
     .topbar img { height: 20px !important; }
 }
+/* ══ FIX MOBILE — da aggiungere in fondo a style-glass.css ══ */
+
+/* Fix 1: hamburger nascosto su desktop */
+@media (min-width: 769px) {
+    .mob-hamburger { display: none !important; }
+}
+
+/* Fix 2: scroll pagina su mobile - box non blocca lo scroll verticale */
+@media (max-width: 768px) {
+    .box { overflow-x: visible; overflow-y: visible; }
+    .sg-content { 
+        overflow-y: auto !important; 
+        -webkit-overflow-scrolling: touch;
+    }
+    /* Solo le tabelle scrollano orizzontalmente */
+    .box table { 
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Fix dispositivi - vista card e tabella funzionanti */
+    #vista-table, #vista-card { overflow-x: auto; }
+    #vista-table table { min-width: 600px; display: table; }
+    
+    /* Bottoni azioni dispositivi su mobile */
+    td > div { flex-wrap: wrap !important; gap: 4px !important; }
+}
