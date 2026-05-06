@@ -12,16 +12,16 @@ try {
 } catch(Exception $e) {}
 
 $voci = [
-    'dashboard.php'          => ['icona'=>'⊞', 'label'=>'Dashboard',      'sezione'=>'principale'],
-    'contenuti.php'      => ['icona'=>'▤',  'label'=>'Contenuti',      'sezione'=>'principale'],
-    'playlist.php'       => ['icona'=>'⊟',  'label'=>'Playlist',       'sezione'=>'principale'],
-    'profili.php'        => ['icona'=>'◈',  'label'=>'Profili',        'sezione'=>'principale'],
-    'club.php'           => ['icona'=>'⬡',  'label'=>'Club',           'sezione'=>'principale'],
-    'dispositivi.php'    => ['icona'=>'▦',  'label'=>'Dispositivi',    'sezione'=>'principale', 'badge'=>$badge_disp>0?$badge_disp:null],
-    'layout.php'         => ['icona'=>'▣',  'label'=>'Layout',         'sezione'=>'principale'],
-    'inserzionisti.php'  => ['icona'=>'🏢', 'label'=>'Inserzionisti',  'sezione'=>'adv'],
-    'report_adv.php'     => ['icona'=>'📊', 'label'=>'Report ADV',     'sezione'=>'adv'],
-    'utenti.php'         => ['icona'=>'👥', 'label'=>'Utenti',         'sezione'=>'sistema', 'admin_only'=>true],
+    'dashboard.php'      => ['icona'=>'⊞', 'label'=>'Dashboard',     'sezione'=>'principale'],
+    'contenuti.php'      => ['icona'=>'▤',  'label'=>'Contenuti',     'sezione'=>'principale'],
+    'playlist.php'       => ['icona'=>'⊟',  'label'=>'Playlist',      'sezione'=>'principale'],
+    'profili.php'        => ['icona'=>'◈',  'label'=>'Profili',       'sezione'=>'principale'],
+    'club.php'           => ['icona'=>'⬡',  'label'=>'Club',          'sezione'=>'principale'],
+    'dispositivi.php'    => ['icona'=>'▦',  'label'=>'Dispositivi',   'sezione'=>'principale', 'badge'=>$badge_disp>0?$badge_disp:null],
+    'layout.php'         => ['icona'=>'▣',  'label'=>'Layout',        'sezione'=>'principale'],
+    'inserzionisti.php'  => ['icona'=>'🏢', 'label'=>'Inserzionisti', 'sezione'=>'adv'],
+    'report_adv.php'     => ['icona'=>'📊', 'label'=>'Report ADV',    'sezione'=>'adv'],
+    'utenti.php'         => ['icona'=>'👥', 'label'=>'Utenti',        'sezione'=>'sistema', 'admin_only'=>true],
 ];
 ?>
 
@@ -66,7 +66,6 @@ $voci = [
     </a>
     <?php endforeach; ?>
 
-    <!-- Profilo utente in fondo -->
     <div class="sb-btm">
         <a href="/profilo.php" class="sb-item <?= $pagina_corrente==='profilo.php'?'active':'' ?>" onclick="closeMobileSidebar()">
             <span class="sb-icon" style="font-size:13px;font-weight:800;color:<?= ($me['ruolo']??'')==='admin'?'var(--sg-orange)':'var(--sg-muted)' ?>;">
@@ -83,20 +82,25 @@ $voci = [
 </nav>
 
 <script>
-// Desktop toggle
+// Mostra hamburger solo su mobile
+(function() {
+    var btn = document.getElementById('mob-hamburger');
+    if (btn) btn.style.display = window.innerWidth <= 768 ? 'flex' : 'none';
+    window.addEventListener('resize', function() {
+        var b = document.getElementById('mob-hamburger');
+        if (b) b.style.display = window.innerWidth <= 768 ? 'flex' : 'none';
+    });
+})();
+
 function toggleSidebar() {
     const sb = document.getElementById('sg-sidebar');
-    if (window.innerWidth <= 768) {
-        toggleMobileSidebar();
-        return;
-    }
+    if (window.innerWidth <= 768) { toggleMobileSidebar(); return; }
     sb.classList.toggle('collapsed');
     const collapsed = sb.classList.contains('collapsed');
     localStorage.setItem('sb_collapsed', collapsed ? '1' : '0');
     document.getElementById('sb-toggle').title = collapsed ? 'Espandi sidebar' : 'Comprimi sidebar';
 }
 
-// Mobile overlay
 function toggleMobileSidebar() {
     const sb = document.getElementById('sg-sidebar');
     const overlay = document.getElementById('mob-overlay');
@@ -114,7 +118,6 @@ function closeMobileSidebar() {
     document.body.classList.remove('mob-sidebar-open');
 }
 
-// Init desktop collapsed state
 (function() {
     if (window.innerWidth > 768 && localStorage.getItem('sb_collapsed') === '1') {
         document.getElementById('sg-sidebar').classList.add('collapsed');
