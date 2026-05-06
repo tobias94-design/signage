@@ -1401,8 +1401,8 @@ a[style*="background: #e94560"] {
 .sg-app {
   display: flex !important;
   flex-direction: column !important;
-  height: 100vh !important;
-  overflow: hidden !important;
+  height: 100vh;
+  overflow: hidden;
   padding-bottom: 0 !important;
 }
 
