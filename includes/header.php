@@ -80,3 +80,14 @@ try {
 <div class="sg-body">
 <?php require_once __DIR__ . '/sidebar.php'; ?>
 <div class="sg-content">
+
+<style>
+@media (min-width: 769px) { .mob-hamburger { display: none; } }
+@media (max-width: 768px) {
+    .sg-app { height: auto !important; overflow: visible !important; }
+    .sg-body { overflow: visible !important; height: auto !important; }
+    .sg-content { overflow-y: auto !important; }
+    #vista-card { display: block !important; }
+    #vista-table { display: block !important; }
+}
+</style>
