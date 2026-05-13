@@ -62,7 +62,8 @@ if (!empty($_GET['log_contenuto'])) {
 }
 
 if (!$dispositivo['profilo_id']) {
-    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'banner' => getBanner($db), 'sidebar_slides' => []];
+    $lobby_corsi_url = $dispositivo['lobby_corsi_url'] ?? '';
+    $risposta = ['modalita' => 'tv', 'reload' => $reload, 'banner' => getBanner($db), 'sidebar_slides' => [], 'lobby_corsi_url' => $lobby_corsi_url];
     salvaCache($cache_file, $risposta);
     echo json_encode($risposta); exit;
 }

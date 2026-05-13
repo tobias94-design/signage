@@ -76,8 +76,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $note       = trim($_POST['note'] ?? '');
         $lat        = $_POST['lat'] !== '' ? (float)$_POST['lat'] : null;
         $lon        = $_POST['lon'] !== '' ? (float)$_POST['lon'] : null;
-        $db->prepare("UPDATE dispositivi SET nome=?,club=?,profilo_id=?,layout=?,sheet_url=?,stream_url=?,numero_tv=?,indirizzo=?,note=?,lat=?,lon=?,tipo_display='tv' WHERE token=?")
-           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $stream_url, $numero_tv, $indirizzo, $note, $lat, $lon, $tok]);
+        $tipo_display    = $_POST['tipo_display'] ?? 'tv';
+        $lobby_citta     = trim($_POST['lobby_citta'] ?? '');
+        $lobby_sheet_url = trim($_POST['lobby_sheet_url'] ?? '');
+        $lobby_corsi_url = trim($_POST['lobby_corsi_url'] ?? '');
+        $db->prepare("UPDATE dispositivi SET nome=?,club=?,profilo_id=?,layout=?,sheet_url=?,stream_url=?,numero_tv=?,indirizzo=?,note=?,lat=?,lon=?,tipo_display=?,lobby_citta=?,lobby_sheet_url=?,lobby_corsi_url=? WHERE token=?")
+           ->execute([$nome, $club, $profilo_id ?: null, $layout, $sheet_url, $stream_url, $numero_tv, $indirizzo, $note, $lat, $lon, $tipo_display, $lobby_citta, $lobby_sheet_url, $lobby_corsi_url, $tok]);
         header('Location: dispositivi.php'); exit;
     }
 
@@ -345,6 +349,29 @@ require_once __DIR__ . '/includes/header.php';
 
             <label>Note</label>
             <textarea name="note" rows="2" style="width:100%;padding:10px;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:var(--sg-white);font-size:13px;resize:vertical;"><?= htmlspecialchars($dev['note'] ?? '') ?></textarea>
+
+            <label>Tipo display</label>
+            <select name="tipo_display" style="width:100%;padding:10px;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:var(--sg-white);font-size:13px;">
+                <option value="tv"     <?= ($dev['tipo_display']??'tv')==='tv'     ?'selected':'' ?>>📺 TV</option>
+                <option value="totem"  <?= ($dev['tipo_display']??'')==='totem'    ?'selected':'' ?>>🗼 Totem</option>
+                <option value="led"    <?= ($dev['tipo_display']??'')==='led'      ?'selected':'' ?>>💡 LED</option>
+                <option value="lobby"  <?= ($dev['tipo_display']??'')==='lobby'    ?'selected':'' ?>>🏨 Lobby</option>
+            </select>
+
+            <div id="campi-lobby" style="display:<?= ($dev['tipo_display']??'')==='lobby'?'block':'none' ?>;">
+                <label style="margin-top:12px;">Città meteo (Lobby)</label>
+                <input type="text" name="lobby_citta" placeholder="Es. Verona" value="<?= htmlspecialchars($dev['lobby_citta'] ?? '') ?>">
+                <label>URL Google Sheet corsi (Lobby)</label>
+                <input type="text" name="lobby_sheet_url" placeholder="https://docs.google.com/spreadsheets/..." value="<?= htmlspecialchars($dev['lobby_sheet_url'] ?? '') ?>">
+                <label>URL pagina corsi (per QR code)</label>
+                <input type="text" name="lobby_corsi_url" placeholder="https://www.gymnasiumclub.net/corsi/#soave" value="<?= htmlspecialchars($dev['lobby_corsi_url'] ?? '') ?>">
+            </div>
+
+            <script>
+            document.querySelector('select[name=tipo_display]').addEventListener('change', function() {
+                document.getElementById('campi-lobby').style.display = this.value === 'lobby' ? 'block' : 'none';
+            });
+            </script>
 
             <div style="display:flex;gap:10px;margin-top:16px;">
                 <button type="submit" class="btn"><?= $view==='nuovo'?'✅ Crea dispositivo':'💾 Salva' ?></button>

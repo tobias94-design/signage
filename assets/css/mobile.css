@@ -1,0 +1,11 @@
+.mob-hamburger { display: none; }
+@media (max-width: 768px) {
+    .mob-hamburger { display: flex; }
+    .sg-app { height: auto; overflow: visible; }
+    .sg-body { overflow: visible; height: auto; }
+    .sg-content { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .box { overflow: visible; }
+    .sidebar { position: fixed; top:0; bottom:0; left:0; width:260px; transform:translateX(-100%); transition:transform 0.28s; z-index:50; }
+    .sidebar.mob-open { transform: translateX(0); }
+}
+.mob-hamburger { display: none; } @media (min-width: 769px) { .mob-hamburger { display: none; } }

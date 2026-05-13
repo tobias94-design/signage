@@ -19,6 +19,7 @@ $voci = [
     'club.php'           => ['icona'=>'⬡',  'label'=>'Club',          'sezione'=>'principale'],
     'dispositivi.php'    => ['icona'=>'▦',  'label'=>'Dispositivi',   'sezione'=>'principale', 'badge'=>$badge_disp>0?$badge_disp:null],
     'layout.php'         => ['icona'=>'▣',  'label'=>'Layout',        'sezione'=>'principale'],
+    'lobby_manager.php'  => ['icona'=>'🏨', 'label'=>'Lobby',         'sezione'=>'principale'],
     'inserzionisti.php'  => ['icona'=>'🏢', 'label'=>'Inserzionisti', 'sezione'=>'adv'],
     'report_adv.php'     => ['icona'=>'📊', 'label'=>'Report ADV',    'sezione'=>'adv'],
     'utenti.php'         => ['icona'=>'👥', 'label'=>'Utenti',        'sezione'=>'sistema', 'admin_only'=>true],

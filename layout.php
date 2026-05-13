@@ -42,6 +42,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['salva_layout_tipo']))
 }
 
 // ── UPLOAD SFONDO SLIDE ───────────────────────────────────────
+function uploadMedia($file, $allowedExts) {
+    if (!$file) { error_log('UM: null'); return ''; }
+    if ($file['error'] !== UPLOAD_ERR_OK) { error_log('UM: err=' . $file['error']); return ''; }
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowedExts)) { error_log('UM: ext=' . $ext); return ''; }
+    $nome = 'lobby_' . uniqid() . '.' . $ext;
+    $dest = __DIR__ . '/uploads/' . $nome;
+    $ok = move_uploaded_file($file['tmp_name'], $dest);
+    error_log('UM: ' . ($ok?'OK':'FAIL') . ' ' . $dest);
+    return $ok ? $nome : '';
+}
+
 function uploadSfondo($file) {
     if (!$file || $file['error'] !== UPLOAD_ERR_OK) return '';
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
@@ -52,6 +64,17 @@ function uploadSfondo($file) {
 }
 
 // ── SALVA BANNER ──────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['salva_lobby_config'])) {
+    $token_lobby = $_POST['dev_token'] ?? '';
+    $citta       = trim($_POST['lobby_citta'] ?? '');
+    $sheet       = trim($_POST['lobby_sheet_url'] ?? '');
+    if ($token_lobby) {
+        $db->prepare("UPDATE dispositivi SET lobby_citta=?, lobby_sheet_url=? WHERE token=?")
+           ->execute([$citta, $sheet, $token_lobby]);
+        $msg = 'ok|Configurazione Lobby salvata!';
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['salva_banner'])) {
     $pid   = (int)($_POST['profilo_id_banner'] ?? 0);
     $logo  = $_POST['logo_attuale'] ?? '';
@@ -80,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['salva_banner'])) {
 }
 
 // ── AZIONI SLIDE ──────────────────────────────────────────────
+error_log('LAYOUT POST: method=' . $_SERVER['REQUEST_METHOD'] . ' azione=' . ($_POST['azione']??'none') . ' FILES_count=' . count($_FILES));
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['azione'])) {
     $dev_token = $_POST['dev_token'] ?? '';
 
@@ -110,6 +134,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['azione'])) {
                     'testo' => trim($_POST['info_testo'] ?? ''),
                     'icona' => trim($_POST['info_icona'] ?? 'ℹ️')
                 ]; 
+                break;
+            case 'immagine':
+                $mediaFile = $_FILES['lobby_media_file'] ?? $_FILES['media_file'] ?? null;
+                $media = uploadMedia($mediaFile, ['jpg','jpeg','png','gif','webp']);
+                error_log('LOBBY UPLOAD: mediaFile=' . json_encode($mediaFile) . ' media=' . $media);
+                $contenuto = ['file' => $media];
+                $sfondo = '';
+                break;
+            case 'video':
+                $mediaFile = $_FILES['lobby_media_file'] ?? $_FILES['media_file'] ?? null;
+                $media = uploadMedia($mediaFile, ['mp4','webm','mov']);
+                $contenuto = ['file' => $media];
+                $sfondo = '';
                 break;
         }
         $ordine = (int)$db->query("SELECT COUNT(*) FROM sidebar_slides WHERE dispositivo_token=".$db->quote($dev_token))->fetchColumn();
@@ -170,6 +207,8 @@ $tipi = [
     'countdown' => ['label'=>'⏳ Countdown evento', 'colore'=>'#f59e0b'],
     'meteo'     => ['label'=>'🌤️ Meteo',            'colore'=>'#3b82f6'],
     'info'      => ['label'=>'ℹ️ Info / Avviso',    'colore'=>'#10b981'],
+    'immagine'  => ['label'=>'🖼️ Immagine',         'colore'=>'#8b5cf6'],
+    'video'     => ['label'=>'🎬 Video',             'colore'=>'#ef4444'],
 ];
 $presets = [
     ''         => ['label'=>'Nessuno (usa colore)',    'css'=>''],
@@ -201,7 +240,7 @@ require_once 'includes/header.php';
                        color:var(--sg-white);padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;min-width:220px;flex:1;max-width:400px;">
             <option value="" disabled <?= !$sel_token?'selected':'' ?> style="color:var(--sg-muted);">— Seleziona un dispositivo —</option>
             <?php
-            $gruppi = ['tv'=>'📺 TV', 'led'=>'💡 Insegne LED', 'totem'=>'🗼 Totem'];
+            $gruppi = ['tv'=>'📺 TV', 'led'=>'💡 Insegne LED', 'totem'=>'🗼 Totem', 'lobby'=>'🏨 Lobby'];
             foreach ($gruppi as $gtipo => $glabel):
                 $gdisps = array_filter($dispositivi, fn($d) => ($d['tipo_display']??'tv') === $gtipo);
                 if (empty($gdisps)) continue;
@@ -448,8 +487,17 @@ if (!empty($logo_esistenti)): ?>
                     <label>Testo</label>
                     <textarea name="info_testo" rows="3" style="width:100%;padding:10px;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:var(--sg-white);font-size:13px;resize:vertical;"></textarea>
                 </div>
+                <div id="campi-immagine" style="display:none;">
+                    <label>File immagine <span style="color:var(--sg-muted);font-size:10px;">JPG, PNG, GIF, WebP — fullscreen 1920×1080</span></label>
+                    <input type="file" name="media_file" accept="image/*">
+                </div>
+                <div id="campi-video" style="display:none;">
+                    <label>File video <span style="color:var(--sg-muted);font-size:10px;">MP4, WebM, MOV</span></label>
+                    <input type="file" name="media_file" accept="video/*">
+                    <p style="font-size:11px;color:var(--sg-muted);margin-top:4px;">⚠️ Per i video la durata viene ignorata — il video gira per intero.</p>
+                </div>
 
-                <div style="border-top:1px solid rgba(255,255,255,0.06);margin-top:14px;padding-top:14px;">
+                <div id="sezione-sfondo" style="border-top:1px solid rgba(255,255,255,0.06);margin-top:14px;padding-top:14px;">
                     <div style="font-size:11px;color:var(--sg-muted);margin-bottom:10px;font-weight:600;">Sfondo</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
                         <div><label>Sfondo</label><input type="color" name="colore_sfondo" value="#111111" style="width:100%;height:38px;cursor:pointer;"></div>
@@ -597,6 +645,9 @@ if (!empty($logo_esistenti)): ?>
             </div>
         </div>
     </div>
+
+    <?php elseif ($tipo_display === 'lobby'): ?>
+    <?php header('Location: /lobby_manager.php?dev=' . urlencode($sel_token)); exit; ?>
 
     <?php elseif ($tipo_display === 'totem'): ?>
     <?php // ══ TOTEM: playlist video ═════════════════════════════ ?>
@@ -846,9 +897,12 @@ if(btnRimuovi){
 // ── Campi dinamici per tipo slide ──
 function aggiornaCampi(){
     var tipo=document.getElementById('tipoSel')?.value; if(!tipo) return;
-    ['countdown','meteo','info'].forEach(function(t){
+    ['countdown','meteo','info','immagine','video'].forEach(function(t){
         var el=document.getElementById('campi-'+t); if(el) el.style.display=(t===tipo)?'block':'none';
     });
+    // Nascondi sezione sfondo per immagine e video (non serve)
+    var sfondoSez = document.getElementById('sezione-sfondo');
+    if (sfondoSez) sfondoSez.style.display = (['immagine','video'].includes(tipo)) ? 'none' : 'block';
 }
 aggiornaCampi();
 

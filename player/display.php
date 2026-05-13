@@ -1,5 +1,8 @@
 <?php
 header('X-Frame-Options: SAMEORIGIN');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
 require_once __DIR__ . '/../includes/db.php';
 $db = getDB();
 
@@ -14,6 +17,12 @@ $stmt->execute([$token]);
 $dispositivo = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$dispositivo) die('<body style="background:#000;color:#e94560;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">Dispositivo non trovato</body>');
+
+// Redirect automatico per tipo_display lobby
+if (($dispositivo['tipo_display'] ?? 'tv') === 'lobby') {
+    header('Location: /player/lobby.php?token=' . urlencode($token) . '&v=' . time());
+    exit;
+}
 
 $club       = $dispositivo['club'] ?? '';
 $sheet_url  = $dispositivo['sheet_url'] ?? '';
