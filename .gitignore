@@ -11,3 +11,4 @@ assets/img/logo_global.png
 database.sqlite-shm
 database.sqlite-wal
 config/sendgrid.key
+config/sendgrid.key
