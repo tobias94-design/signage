@@ -338,19 +338,26 @@ function mostraCorsi(slide) {
     const oraStr = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
     const clubName = 'Gymnasium Club'+(CLUB?' '+CLUB:'');
 
+    // Filtra corsi futuri
+    corsiFuturi = corsiOggi.filter(c => {
+        const p = c.orario.split(':');
+        const s = parseInt(p[0])*60 + parseInt(p[1]);
+        return (s + c.durata) > oraOra;
+    });
+
     let attivoIdx = -1;
-    corsiOggi.forEach((c, i) => {
+    corsiFuturi.forEach((c, i) => {
         const p = c.orario.split(':');
         const s = parseInt(p[0])*60 + parseInt(p[1]);
         if (s <= oraOra && oraOra < s + c.durata) attivoIdx = i;
     });
     let startIdx = attivoIdx >= 0 ? Math.max(0, attivoIdx) : 0;
-    let endIdx = Math.min(corsiOggi.length, startIdx + 3);
+    let endIdx = Math.min(corsiFuturi.length, startIdx + 3);
     if (endIdx - startIdx < 3) startIdx = Math.max(0, endIdx - 3);
-    const visibili = corsiOggi.slice(startIdx, endIdx);
+    const visibili = corsiFuturi.slice(startIdx, endIdx);
 
     let righe = '';
-    corsiFuturi = corsiOggi; if (!corsiFuturi.length) {
+    if (!corsiFuturi.length) {
         const qrUrl = LOBBY_CORSI_URL || 'https://www.gymnasiumclub.net/corsi/';
         const qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&color=ffffff&bgcolor=000000&data=' + encodeURIComponent(qrUrl);
         righe = `<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:120px;padding:0 80px;">

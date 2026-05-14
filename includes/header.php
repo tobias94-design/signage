@@ -33,10 +33,7 @@ try {
 ?>
 <!-- ══ TOPBAR ══════════════════════════════════════════════ -->
 <header class="topbar">
-    <!-- Hamburger mobile -->
-    <button class="mob-hamburger" id="mob-hamburger" onclick="toggleMobileSidebar()" aria-label="Menu">
-        <span></span><span></span><span></span>
-    </button>
+
     <img src="/assets/img/Logo_in_orizzontale.png" alt="PixelBridge"
          style="height:26px;object-fit:contain;opacity:0.95;flex-shrink:0;">
     <div class="topbar-div"></div>

@@ -339,6 +339,9 @@ require_once __DIR__ . '/includes/header.php';
             <label>URL Google Sheet Corsi</label>
             <input type="text" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/..." value="<?= htmlspecialchars($dev['sheet_url'] ?? '') ?>">
 
+            <label>Numero TV</label>
+            <input type="number" name="numero_tv" placeholder="Es. 1" value="<?= htmlspecialchars($dev['numero_tv'] ?? '') ?>" style="width:120px;">
+
             <label>Indirizzo club</label>
             <div style="display:flex;gap:8px;">
                 <input type="text" name="indirizzo" id="f_indirizzo" placeholder="Es: Via Roma 12, Soave VR"
