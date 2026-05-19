@@ -136,11 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['azione'])) {
                 ]; 
                 break;
             case 'immagine':
-                $mediaFile = $_FILES['lobby_media_file'] ?? $_FILES['media_file'] ?? null;
-                $media = uploadMedia($mediaFile, ['jpg','jpeg','png','gif','webp']);
-                error_log('LOBBY UPLOAD: mediaFile=' . json_encode($mediaFile) . ' media=' . $media);
-                $contenuto = ['file' => $media];
-                $sfondo = '';
+                $contenuto = [];
                 break;
             case 'video':
                 $mediaFile = $_FILES['lobby_media_file'] ?? $_FILES['media_file'] ?? null;
@@ -449,7 +445,7 @@ if (!empty($logo_esistenti)): ?>
                 + Nuova slide
                 <span style="color:var(--sg-orange);text-transform:none;letter-spacing:0;font-size:10px;font-weight:400;"> per <?= htmlspecialchars($sel_dev['club']?:$sel_dev['nome']) ?></span>
             </div>
-            <form method="POST" enctype="multipart/form-data">
+            <form method="POST" action="/layout.php?dev=<?= urlencode($sel_token) ?>&amp;tab=slides" enctype="multipart/form-data">
                 <input type="hidden" name="azione" value="aggiungi_slide">
                 <input type="hidden" name="dev_token" value="<?= htmlspecialchars($sel_token) ?>">
                 <label>Tipo slide</label>
@@ -487,10 +483,7 @@ if (!empty($logo_esistenti)): ?>
                     <label>Testo</label>
                     <textarea name="info_testo" rows="3" style="width:100%;padding:10px;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:var(--sg-white);font-size:13px;resize:vertical;"></textarea>
                 </div>
-                <div id="campi-immagine" style="display:none;">
-                    <label>File immagine <span style="color:var(--sg-muted);font-size:10px;">JPG, PNG, GIF, WebP — fullscreen 1920×1080</span></label>
-                    <input type="file" name="media_file" accept="image/*">
-                </div>
+                <div id="campi-immagine" style="display:none;"></div>
                 <div id="campi-video" style="display:none;">
                     <label>File video <span style="color:var(--sg-muted);font-size:10px;">MP4, WebM, MOV</span></label>
                     <input type="file" name="media_file" accept="video/*">
@@ -902,7 +895,7 @@ function aggiornaCampi(){
     });
     // Nascondi sezione sfondo per immagine e video (non serve)
     var sfondoSez = document.getElementById('sezione-sfondo');
-    if (sfondoSez) sfondoSez.style.display = (['immagine','video'].includes(tipo)) ? 'none' : 'block';
+    if (sfondoSez) sfondoSez.style.display = (['video'].includes(tipo)) ? 'none' : 'block';
 }
 aggiornaCampi();
 

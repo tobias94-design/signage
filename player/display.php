@@ -246,7 +246,7 @@ function mostraSlide(idx) {
         const colTesto = slide.colore_testo || '#ffffff';
         if (slide.sfondo) {
             sfondoEl.style.cssText = `position:absolute;inset:0;background-size:cover;background-position:center;z-index:0;background-image:url('${BASE_URL}uploads/${slide.sfondo}')`;
-            overlayEl.style.display = 'block';
+            overlayEl.style.display = slide.tipo === 'immagine' ? 'none' : 'block';
         } else if (slide.sfondo_preset && PRESETS[slide.sfondo_preset]) {
             sfondoEl.style.cssText = `position:absolute;inset:0;background-size:cover;background-position:center;z-index:0;background:${PRESETS[slide.sfondo_preset]}`;
             overlayEl.style.display = 'none';
@@ -260,6 +260,7 @@ function mostraSlide(idx) {
             case 'countdown': renderCountdown(contentEl, slide, cfg, colTesto); break;
             case 'meteo':     renderMeteo(contentEl, slide, cfg, colTesto); break;
             case 'info':      renderInfo(contentEl, slide, cfg, colTesto); break;
+            case 'immagine':  renderImmagine(contentEl, slide); break;
             default:          renderInfo(contentEl, slide, cfg, colTesto);
         }
         widget.classList.remove('fade-out');
@@ -424,6 +425,13 @@ async function renderMeteo(el, slide, cfg, colTesto) {
             <div style="font-size:11px;opacity:0.5;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">Prossimi 3 giorni</div>
             ${previsioni}
         </div>` : ''}`;
+}
+
+// ── RENDER IMMAGINE ─────────────────────────────────────────────
+function renderImmagine(el, slide) {
+    document.getElementById('widget-overlay').style.display = 'none';
+    document.getElementById('widget-sfondo').style.cssText = `position:absolute;inset:0;background-size:cover;background-position:center;z-index:0;background-image:url('${BASE_URL}uploads/${slide.sfondo}')`;
+    el.innerHTML = '';
 }
 
 // ── RENDER INFO ───────────────────────────────────────────────────
