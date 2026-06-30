@@ -10,12 +10,10 @@ Sub Main()
         mouse_enabled: false,
         storage_path: "SD:",
         storage_quota: 1073741824,
-        url: "file:///sd:/index.html",
-        port: 0
+        url: "file:///sd:/index.html"
     }
 
     msgPort = CreateObject("roMessagePort")
-    config.port = msgPort
 
     h = CreateObject("roHtmlWidget", r, config)
     h.SetPort(msgPort)
