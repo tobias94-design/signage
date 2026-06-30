@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>PixelBridge</title>
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100vw; height: 100vh;
+    background: #000;
+    font-family: Arial, Helvetica, sans-serif;
+    overflow: hidden;
+  }
+  #pairing {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    color: #fff;
+  }
+  #pairing .logo {
+    font-size: 48px;
+    color: #E85002;
+    margin-bottom: 30px;
+    font-weight: bold;
+  }
+  #pairing .code {
+    font-size: 140px;
+    font-weight: 900;
+    letter-spacing: 20px;
+  }
+  #pairing .hint {
+    font-size: 28px;
+    color: #888;
+    margin-top: 30px;
+  }
+  #pairing .status {
+    font-size: 20px;
+    color: #555;
+    margin-top: 50px;
+  }
+</style>
+</head>
+<body>
+
+<div id="pairing">
+  <div class="logo">PixelBridge</div>
+  <div class="code" id="code">------</div>
+  <div class="hint">Inserisci questo codice nel pannello admin</div>
+  <div class="status" id="status">Generazione codice...</div>
+</div>
+
+<script>
+var SERVER_URL = "https://pixelbridge.it";
+var MACHINE_NAME = "BrightSign-XT1144";
+
+function generaCodice() {
+  var c = "";
+  for (var i = 0; i < 6; i++) {
+    c += Math.floor(Math.random() * 10);
+  }
+  return c;
+}
+
+function setStatus(msg) {
+  document.getElementById("status").textContent = msg;
+}
+
+function avviaPairing() {
+  var code = generaCodice();
+  document.getElementById("code").textContent = code;
+
+  setStatus("Registrazione in corso...");
+
+  fetch(SERVER_URL + "/api/claim.php?action=register&code=" + code + "&machine=" + encodeURIComponent(MACHINE_NAME))
+    .then(function(res) { return res.text(); })
+    .then(function() {
+      setStatus("In attesa di conferma dal pannello admin...");
+      pollCheck(code);
+    })
+    .catch(function(err) {
+      setStatus("Errore di rete, riprovo tra 5s...");
+      setTimeout(avviaPairing, 5000);
+    });
+}
+
+function pollCheck(code) {
+  fetch(SERVER_URL + "/api/claim.php?action=check&code=" + code)
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data && data.token) {
+        setStatus("Pairing completato! Avvio player...");
+        localStorage.setItem("pb_token", data.token);
+        setTimeout(function() {
+          window.location.href = SERVER_URL + "/player/display.php?token=" + data.token;
+        }, 1000);
+      } else {
+        setTimeout(function() { pollCheck(code); }, 3000);
+      }
+    })
+    .catch(function(err) {
+      setTimeout(function() { pollCheck(code); }, 3000);
+    });
+}
+
+// Se ho già un token salvato, vai dritto al player
+var savedToken = localStorage.getItem("pb_token");
+if (savedToken) {
+  setStatus("Token trovato, avvio player...");
+  window.location.href = SERVER_URL + "/player/display.php?token=" + savedToken;
+} else {
+  avviaPairing();
+}
+</script>
+
+</body>
+</html>
