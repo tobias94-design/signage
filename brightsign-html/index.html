@@ -48,12 +48,50 @@
   <div class="logo">PixelBridge</div>
   <div class="code" id="code">------</div>
   <div class="hint">Inserisci questo codice nel pannello admin</div>
-  <div class="status" id="status">Generazione codice...</div>
+  <div class="status" id="status">Avvio...</div>
 </div>
 
 <script>
 var SERVER_URL = "https://pixelbridge.it";
 var MACHINE_NAME = "BrightSign-XT1144";
+var TOKEN_PATH = "/storage/sd/pb_token.txt";
+
+var fs = null;
+try {
+  fs = require('fs');
+} catch (e) {
+  fs = null;
+}
+
+function setStatus(msg) {
+  document.getElementById("status").textContent = msg;
+}
+
+function leggiTokenSalvato() {
+  if (!fs) return null;
+  try {
+    if (fs.existsSync(TOKEN_PATH)) {
+      var t = fs.readFileSync(TOKEN_PATH, 'utf8').trim();
+      if (t.length > 0) return t;
+    }
+  } catch (e) {
+    console.log("Errore lettura token: " + e);
+  }
+  return null;
+}
+
+function salvaToken(token) {
+  if (!fs) {
+    console.log("fs non disponibile, impossibile salvare token su file");
+    return;
+  }
+  try {
+    fs.writeFileSync(TOKEN_PATH, token, 'utf8');
+    console.log("Token salvato su " + TOKEN_PATH);
+  } catch (e) {
+    console.log("Errore scrittura token: " + e);
+  }
+}
 
 function generaCodice() {
   var c = "";
@@ -63,14 +101,14 @@ function generaCodice() {
   return c;
 }
 
-function setStatus(msg) {
-  document.getElementById("status").textContent = msg;
+function avviaPlayer(token) {
+  setStatus("Avvio player...");
+  window.location.href = SERVER_URL + "/player/display.php?token=" + token;
 }
 
 function avviaPairing() {
   var code = generaCodice();
   document.getElementById("code").textContent = code;
-
   setStatus("Registrazione in corso...");
 
   fetch(SERVER_URL + "/api/claim.php?action=register&code=" + code + "&machine=" + encodeURIComponent(MACHINE_NAME))
@@ -90,11 +128,9 @@ function pollCheck(code) {
     .then(function(res) { return res.json(); })
     .then(function(data) {
       if (data && data.token) {
-        setStatus("Pairing completato! Avvio player...");
-        localStorage.setItem("pb_token", data.token);
-        setTimeout(function() {
-          window.location.href = SERVER_URL + "/player/display.php?token=" + data.token;
-        }, 1000);
+        setStatus("Pairing completato!");
+        salvaToken(data.token);
+        setTimeout(function() { avviaPlayer(data.token); }, 1000);
       } else {
         setTimeout(function() { pollCheck(code); }, 3000);
       }
@@ -104,11 +140,10 @@ function pollCheck(code) {
     });
 }
 
-// Se ho già un token salvato, vai dritto al player
-var savedToken = localStorage.getItem("pb_token");
+var savedToken = leggiTokenSalvato();
 if (savedToken) {
-  setStatus("Token trovato, avvio player...");
-  window.location.href = SERVER_URL + "/player/display.php?token=" + savedToken;
+  setStatus("Token trovato su SD, avvio player...");
+  avviaPlayer(savedToken);
 } else {
   avviaPairing();
 }
