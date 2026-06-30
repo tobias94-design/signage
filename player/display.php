@@ -43,6 +43,7 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
     <meta charset="UTF-8">
     <title>PixelBridge</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
@@ -92,7 +93,7 @@ $SIDEBAR_W  = (int)round(1920 - ($MAIN_H * 16 / 9));
 <div id="player-root">
     <div id="main">
         <div id="layer-tv">
-            <div id="tv-placeholder">📺 In attesa segnale TV...</div>
+            <div id="tv-placeholder"><i class="fas fa-tv"></i> In attesa segnale TV...</div>
             <video id="tv-video" autoplay playsinline muted></video>
         </div>
         <div id="colonna-corsi">
@@ -280,7 +281,7 @@ function renderCorsi(el, slide, colTesto) {
     let html = `<div class="widget-header">${slide.titolo || 'In programma oggi'}</div>`;
     if (!filtrati.length) {
         html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
-            <div style="font-size:48px;">💪</div>
+            <div style="font-size:48px;"><i class="fas fa-dumbbell"></i></div>
             <div style="font-size:28px;font-weight:bold;text-align:center;line-height:1.4;">Buon<br>allenamento!</div>
         </div>`;
     } else {
@@ -335,7 +336,7 @@ function renderCountdown(el, slide, cfg, colTesto) {
         if (diff <= 0) {
             if (countdownIntervals[slideId]) { clearInterval(countdownIntervals[slideId]); delete countdownIntervals[slideId]; }
             if (autoDisable) {
-                content.innerHTML = `<div class="countdown-titolo" style="font-size:32px;">✓ Evento in corso</div>`;
+                content.innerHTML = `<div class="countdown-titolo" style="font-size:32px;"><i class="fas fa-check"></i> Evento in corso</div>`;
                 fetch(BASE_URL + 'api/stato.php?token=' + TOKEN + '&action=disable_slide&id=' + slideId)
                     .then(r => r.json())
                     .then(() => setTimeout(() => aggiornaDaAPI(), 2000))
@@ -365,7 +366,7 @@ function renderCountdown(el, slide, cfg, colTesto) {
 }
 
 // ── RENDER METEO ─────────────────────────────────────────────────
-const WMO_ICONS = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',71:'❄️',73:'❄️',75:'❄️',80:'🌦️',81:'🌧️',82:'⛈️',95:'⛈️',96:'⛈️',99:'⛈️'};
+const WMO_ICONS = {0:'fa-sun',1:'fa-cloud-sun',2:'fa-cloud-sun',3:'fa-cloud',45:'fa-smog',48:'fa-smog',51:'fa-cloud-rain',53:'fa-cloud-rain',55:'fa-cloud-showers-heavy',61:'fa-cloud-rain',63:'fa-cloud-showers-heavy',65:'fa-cloud-showers-heavy',71:'fa-snowflake',73:'fa-snowflake',75:'fa-snowflake',80:'fa-cloud-rain',81:'fa-cloud-showers-heavy',82:'fa-bolt',95:'fa-bolt',96:'fa-bolt',99:'fa-bolt'};
 const WMO_DESC  = {0:'Sereno',1:'Prevalenz. sereno',2:'Parz. nuvoloso',3:'Nuvoloso',45:'Nebbia',51:'Pioggerella',61:'Pioggia',65:'Pioggia intensa',71:'Neve',80:'Rovesci',95:'Temporale'};
 
 async function fetchMeteo(citta, lat, lon) {
@@ -406,7 +407,7 @@ async function renderMeteo(el, slide, cfg, colTesto) {
             const max = Math.round(data.daily.temperature_2m_max[i]);
             previsioni += `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;font-size:14px;">
                 <span style="min-width:35px;">${giorni[d.getDay()]}</span>
-                <span style="font-size:20px;margin:0 8px;">${WMO_ICONS[wmo_day]||'🌡️'}</span>
+                <span style="font-size:20px;margin:0 8px;"><i class="fas ${WMO_ICONS[wmo_day]||'fa-temperature-half'}"></i></span>
                 <span style="opacity:0.65;font-size:13px;">Min${min}° Max${max}°</span>
             </div>`;
         }
@@ -414,11 +415,11 @@ async function renderMeteo(el, slide, cfg, colTesto) {
     el.innerHTML = `
         <div class="widget-header">${titolo}</div>
         <div class="widget-meteo">
-            <div class="meteo-icona">${WMO_ICONS[wmo]||'🌡️'}</div>
+            <div class="meteo-icona"><i class="fas ${WMO_ICONS[wmo]||'fa-temperature-half'}"></i></div>
             <div class="meteo-temp">${Math.round(cur.temperature_2m)}°C</div>
             <div class="meteo-desc">${WMO_DESC[wmo]||''}</div>
             <div class="meteo-citta">${cfg.citta||''}</div>
-            <div class="meteo-dettagli"><span>💧 ${cur.relativehumidity_2m}%</span><span>💨 ${Math.round(cur.windspeed_10m)} km/h</span></div>
+            <div class="meteo-dettagli"><span><i class="fas fa-droplet"></i> ${cur.relativehumidity_2m}%</span><span><i class="fas fa-wind"></i> ${Math.round(cur.windspeed_10m)} km/h</span></div>
         </div>
         ${previsioni ? `
         <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.15);">
