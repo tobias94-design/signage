@@ -7,11 +7,11 @@
   html, body {
     margin: 0; padding: 0;
     width: 100vw; height: 100vh;
-    background: #000;
+    background: #050e1a;
     font-family: Arial, Helvetica, sans-serif;
     overflow: hidden;
   }
-  #pairing {
+  #screen {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -19,135 +19,79 @@
     height: 100vh;
     color: #fff;
   }
-  #pairing .logo {
-    font-size: 48px;
-    color: #E85002;
-    margin-bottom: 30px;
-    font-weight: bold;
-  }
-  #pairing .code {
-    font-size: 140px;
-    font-weight: 900;
-    letter-spacing: 20px;
-  }
-  #pairing .hint {
-    font-size: 28px;
-    color: #888;
-    margin-top: 30px;
-  }
-  #pairing .status {
-    font-size: 20px;
-    color: #555;
-    margin-top: 50px;
-  }
+  .logo { font-size: 42px; color: #F7192E; font-weight: bold; margin-bottom: 40px; }
+  .code { font-size: 120px; font-weight: 900; letter-spacing: 16px; color: #fff; font-family: monospace; }
+  .hint { font-size: 26px; color: #888; margin-top: 30px; }
+  .status { font-size: 18px; color: #444; margin-top: 40px; }
 </style>
 </head>
 <body>
-
-<div id="pairing">
+<div id="screen">
   <div class="logo">PixelBridge</div>
-  <div class="code" id="code">------</div>
+  <div class="code" id="code">--------</div>
   <div class="hint">Inserisci questo codice nel pannello admin</div>
-  <div class="status" id="status">Avvio...</div>
+  <div class="status" id="status">Connessione in corso...</div>
 </div>
-
 <script>
-var SERVER_URL = "https://pixelbridge.it";
-var MACHINE_NAME = "BrightSign-XT1144";
-var TOKEN_PATH = "/storage/sd/pb_token.txt";
+var SERVER = "https://pixelbridge.it";
+var MACHINE = "BrightSign-XT1144";
 
-var fs = null;
-try {
-  fs = require('fs');
-} catch (e) {
-  fs = null;
-}
-
-function setStatus(msg) {
+function status(msg) {
   document.getElementById("status").textContent = msg;
 }
 
-function leggiTokenSalvato() {
-  if (!fs) return null;
-  try {
-    if (fs.existsSync(TOKEN_PATH)) {
-      var t = fs.readFileSync(TOKEN_PATH, 'utf8').trim();
-      if (t.length > 0) return t;
-    }
-  } catch (e) {
-    console.log("Errore lettura token: " + e);
+function genera() {
+  var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  var code = "";
+  for (var i = 0; i < 8; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return null;
+  return code;
 }
 
-function salvaToken(token) {
-  if (!fs) {
-    console.log("fs non disponibile, impossibile salvare token su file");
-    return;
-  }
-  try {
-    fs.writeFileSync(TOKEN_PATH, token, 'utf8');
-    console.log("Token salvato su " + TOKEN_PATH);
-  } catch (e) {
-    console.log("Errore scrittura token: " + e);
-  }
-}
-
-function generaCodice() {
-  var c = "";
-  for (var i = 0; i < 6; i++) {
-    c += Math.floor(Math.random() * 10);
-  }
-  return c;
-}
-
-function avviaPlayer(token) {
-  setStatus("Avvio player...");
-  window.location.href = SERVER_URL + "/player/display.php?token=" + token;
-}
-
-function avviaPairing() {
-  var code = generaCodice();
+function avvia() {
+  var code = genera();
   document.getElementById("code").textContent = code;
-  setStatus("Registrazione in corso...");
 
-  fetch(SERVER_URL + "/api/claim.php?action=register&code=" + code + "&machine=" + encodeURIComponent(MACHINE_NAME))
-    .then(function(res) { return res.text(); })
-    .then(function() {
-      setStatus("In attesa di conferma dal pannello admin...");
-      pollCheck(code);
-    })
-    .catch(function(err) {
-      setStatus("Errore di rete, riprovo tra 5s...");
-      setTimeout(avviaPairing, 5000);
-    });
-}
-
-function pollCheck(code) {
-  fetch(SERVER_URL + "/api/claim.php?action=check&code=" + code)
-    .then(function(res) { return res.json(); })
+  fetch(SERVER + "/api/claim.php?action=register&code=" + code + "&machine=" + encodeURIComponent(MACHINE))
+    .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (data && data.token) {
-        setStatus("Pairing completato!");
-        salvaToken(data.token);
-        setTimeout(function() { avviaPlayer(data.token); }, 1000);
+      if (data.ok) {
+        status("In attesa di conferma dal pannello admin...");
+        poll(code);
       } else {
-        setTimeout(function() { pollCheck(code); }, 3000);
+        status("Errore registrazione, riprovo...");
+        setTimeout(avvia, 5000);
       }
     })
-    .catch(function(err) {
-      setTimeout(function() { pollCheck(code); }, 3000);
+    .catch(function() {
+      status("Errore di rete, riprovo tra 5s...");
+      setTimeout(avvia, 5000);
     });
 }
 
-var savedToken = leggiTokenSalvato();
-if (savedToken) {
-  setStatus("Token trovato su SD, avvio player...");
-  avviaPlayer(savedToken);
-} else {
-  avviaPairing();
+function poll(code) {
+  fetch(SERVER + "/api/claim.php?action=check&code=" + code)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok && data.status === "claimed" && data.token) {
+        status("Associazione completata! Avvio...");
+        setTimeout(function() {
+          window.location.href = SERVER + "/player/display.php?token=" + data.token;
+        }, 1500);
+      } else if (data.status === "expired") {
+        status("Codice scaduto, genero nuovo codice...");
+        setTimeout(avvia, 2000);
+      } else {
+        setTimeout(function() { poll(code); }, 3000);
+      }
+    })
+    .catch(function() {
+      setTimeout(function() { poll(code); }, 3000);
+    });
 }
-</script>
 
+avvia();
+</script>
 </body>
 </html>
