@@ -4,25 +4,12 @@
 <meta charset="UTF-8">
 <title>PixelBridge</title>
 <style>
-  html, body {
-    margin: 0; padding: 0;
-    width: 100vw; height: 100vh;
-    background: #050e1a;
-    font-family: Arial, Helvetica, sans-serif;
-    overflow: hidden;
-  }
-  #screen {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    color: #fff;
-  }
-  .logo { font-size: 42px; color: #F7192E; font-weight: bold; margin-bottom: 40px; }
-  .code { font-size: 120px; font-weight: 900; letter-spacing: 16px; color: #fff; font-family: monospace; }
-  .hint { font-size: 26px; color: #888; margin-top: 30px; }
-  .status { font-size: 18px; color: #444; margin-top: 40px; }
+  html, body { margin:0; padding:0; width:100vw; height:100vh; background:#050e1a; font-family:Arial,sans-serif; overflow:hidden; }
+  #screen { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; color:#fff; }
+  .logo { font-size:42px; color:#F7192E; font-weight:bold; margin-bottom:40px; }
+  .code { font-size:120px; font-weight:900; letter-spacing:16px; color:#fff; font-family:monospace; }
+  .hint { font-size:26px; color:#888; margin-top:30px; }
+  .status { font-size:18px; color:#aaa; margin-top:40px; max-width:80%; text-align:center; }
 </style>
 </head>
 <body>
@@ -30,13 +17,14 @@
   <div class="logo">PixelBridge</div>
   <div class="code" id="code">--------</div>
   <div class="hint">Inserisci questo codice nel pannello admin</div>
-  <div class="status" id="status">Connessione in corso...</div>
+  <div class="status" id="status">Avvio...</div>
 </div>
 <script>
 var SERVER = "https://pixelbridge.it";
 var MACHINE = "BrightSign-XT1144";
+var currentCode = null;
 
-function status(msg) {
+function setStatus(msg) {
   document.getElementById("status").textContent = msg;
 }
 
@@ -50,22 +38,23 @@ function genera() {
 }
 
 function avvia() {
-  var code = genera();
-  document.getElementById("code").textContent = code;
+  currentCode = genera();
+  document.getElementById("code").textContent = currentCode;
+  setStatus("Registrazione codice " + currentCode + "...");
 
-  fetch(SERVER + "/api/claim.php?action=register&code=" + code + "&machine=" + encodeURIComponent(MACHINE))
+  fetch(SERVER + "/api/claim.php?action=register&code=" + currentCode + "&machine=" + encodeURIComponent(MACHINE))
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.ok) {
-        status("In attesa di conferma dal pannello admin...");
-        poll(code);
+        setStatus("Codice valido per 10 minuti. In attesa conferma admin...");
+        poll(currentCode);
       } else {
-        status("Errore registrazione, riprovo...");
+        setStatus("Errore server: " + JSON.stringify(data) + " - riprovo tra 5s");
         setTimeout(avvia, 5000);
       }
     })
-    .catch(function() {
-      status("Errore di rete, riprovo tra 5s...");
+    .catch(function(err) {
+      setStatus("Errore rete: " + err.toString() + " - riprovo tra 5s");
       setTimeout(avvia, 5000);
     });
 }
@@ -75,18 +64,20 @@ function poll(code) {
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.ok && data.status === "claimed" && data.token) {
-        status("Associazione completata! Avvio...");
+        setStatus("Associato! Avvio player...");
         setTimeout(function() {
-          window.location.href = SERVER + "/player/display.php?token=" + data.token;
+          window.location.href = SERVER + "/player/display_v2.php?token=" + data.token;
         }, 1500);
       } else if (data.status === "expired") {
-        status("Codice scaduto, genero nuovo codice...");
+        setStatus("Codice scaduto, genero nuovo...");
         setTimeout(avvia, 2000);
       } else {
+        setStatus("Attendo conferma... (" + data.status + ")");
         setTimeout(function() { poll(code); }, 3000);
       }
     })
-    .catch(function() {
+    .catch(function(err) {
+      setStatus("Errore poll: " + err.toString());
       setTimeout(function() { poll(code); }, 3000);
     });
 }
