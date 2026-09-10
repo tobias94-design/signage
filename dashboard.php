@@ -1,277 +1,388 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/db.php';
-requireLogin();
+
+$page_title = 'Dashboard';
 $db = getDB();
-$tot_cont    = (int)$db->query("SELECT COUNT(*) FROM contenuti")->fetchColumn();
-$tot_play    = (int)$db->query("SELECT COUNT(*) FROM playlist")->fetchColumn();
-$tot_profili = (int)$db->query("SELECT COUNT(*) FROM profili")->fetchColumn();
-$tot_disp    = (int)$db->query("SELECT COUNT(*) FROM dispositivi")->fetchColumn();
-$online_disp = (int)$db->query("SELECT COUNT(*) FROM dispositivi WHERE ultimo_ping > datetime('now','-2 minutes')")->fetchColumn();
+$tid = TENANT_ID;
+
+// ── Query metriche ───────────────────────────────────────────
+$tot_disp    = (int)$db->prepare("SELECT COUNT(*) FROM dispositivi WHERE tenant_id = ?")->execute([$tid]) ? (int)$db->query("SELECT COUNT(*) FROM dispositivi WHERE tenant_id = $tid")->fetchColumn() : 0;
+
+// Query più pulite con helper
+$stmt = $db->prepare("SELECT COUNT(*) FROM dispositivi WHERE tenant_id = ?");
+$stmt->execute([$tid]);
+$tot_disp = (int)$stmt->fetchColumn();
+
+$stmt = $db->prepare("SELECT COUNT(*) FROM dispositivi WHERE tenant_id = ? AND stato = 'online' AND ultimo_ping > DATE_SUB(NOW(), INTERVAL 2 MINUTE)");
+$stmt->execute([$tid]);
+$online_disp = (int)$stmt->fetchColumn();
+
 $offline_disp = $tot_disp - $online_disp;
 $uptime_pct   = $tot_disp > 0 ? round($online_disp / $tot_disp * 100) : 0;
 
-// TV totali — legge numero_tv direttamente da dispositivi
-$tv_online = 0; $tv_offline = 0; $tv_totali = 0;
-try {
-    $pb_rows = $db->query("
-        SELECT d.club, d.numero_tv,
-               CASE WHEN d.ultimo_ping > datetime('now','-2 minutes') THEN 1 ELSE 0 END AS pb_online
-        FROM dispositivi d
-    ")->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($pb_rows as $pb) {
-        $n = (int)($pb['numero_tv'] ?? 0);
-        if ($n <= 0) $n = 1; // se non configurato, conta il dispositivo stesso come 1 TV
-        $tv_totali += $n;
-        if ($pb['pb_online']) $tv_online += $n;
-        else $tv_offline += $n;
-    }
-} catch (Exception $e) {}
+// TV totali
+$stmt = $db->prepare("SELECT COALESCE(SUM(numero_tv), 0) FROM dispositivi WHERE tenant_id = ?");
+$stmt->execute([$tid]);
+$tot_tv = (int)$stmt->fetchColumn();
 
-$giorno_anno = (int)date('z') + 1;
-$giorni_tot  = date('L') ? 366 : 365;
-$anno_pct    = round($giorno_anno / $giorni_tot * 100);
+$stmt = $db->prepare("SELECT COALESCE(SUM(numero_tv), 0) FROM dispositivi WHERE tenant_id = ? AND stato = 'online' AND ultimo_ping > DATE_SUB(NOW(), INTERVAL 2 MINUTE)");
+$stmt->execute([$tid]);
+$tv_online = (int)$stmt->fetchColumn();
 
-$dispositivi = $db->query("
-    SELECT d.nome, d.club, d.numero_tv, d.indirizzo, p.nome AS profilo_nome, d.ultimo_ping,
-           CASE WHEN d.ultimo_ping > datetime('now','-2 minutes') THEN 'online' ELSE 'offline' END AS stato
-    FROM dispositivi d LEFT JOIN profili p ON p.id = d.profilo_id
-    ORDER BY stato DESC, d.nome ASC
-")->fetchAll(PDO::FETCH_ASSOC);
+// Contenuti
+$stmt = $db->prepare("SELECT COUNT(*) FROM contenuti WHERE tenant_id = ?");
+$stmt->execute([$tid]);
+$tot_contenuti = (int)$stmt->fetchColumn();
 
-// clubs_preview — aggrega per club
-$clubs_preview = [];
-foreach ($dispositivi as $d) {
-    $club = !empty($d['club']) ? $d['club'] : null;
-    if (!$club) continue;
-    if (!isset($clubs_preview[$club])) {
-        $clubs_preview[$club] = ['nome'=>$club,'online'=>0,'offline'=>0,'profilo'=>$d['profilo_nome']??'—','num_tv'=>0];
-    }
-    $clubs_preview[$club][$d['stato']]++;
-    $clubs_preview[$club]['num_tv'] += max(1, (int)($d['numero_tv'] ?? 0));
-}
-$clubs_preview = array_values($clubs_preview);
+$stmt = $db->prepare("SELECT COUNT(DISTINCT c.id) FROM contenuti c JOIN playlist_items pi ON pi.contenuto_id = c.id JOIN playlist p ON p.id = pi.playlist_id WHERE c.tenant_id = ?");
+$stmt->execute([$tid]);
+$cont_usati = (int)$stmt->fetchColumn();
+$cont_inutilizzati = $tot_contenuti - $cont_usati;
+$cont_pct = $tot_contenuti > 0 ? round($cont_usati / $tot_contenuti * 100) : 0;
 
-$schedule = [];
-try {
-    $map_gg = ['Mon'=>'lun','Tue'=>'mar','Wed'=>'mer','Thu'=>'gio','Fri'=>'ven','Sat'=>'sab','Sun'=>'dom'];
-    $oggi = $map_gg[date('D')] ?? 'lun';
-    $schedule = $db->query("SELECT e.nome, e.ora_inizio, e.ora_fine, pl.nome AS playlist_nome FROM profili_eventi e LEFT JOIN playlist pl ON pl.id = e.playlist_id WHERE e.giorni LIKE '%$oggi%' ORDER BY e.ora_inizio LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
-} catch (Exception $e) {}
+// Playlist
+$stmt = $db->prepare("SELECT COUNT(*) FROM playlist WHERE tenant_id = ?");
+$stmt->execute([$tid]);
+$tot_playlist = (int)$stmt->fetchColumn();
 
-$contenuti_recenti = [];
-try { $contenuti_recenti = $db->query("SELECT nome, tipo FROM contenuti ORDER BY id DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC); } catch (Exception $e) {}
+// Dispositivi recenti con stato
+$stmt = $db->prepare("
+    SELECT d.id, d.nome, d.club, d.token, d.stato, d.hw_type, d.numero_tv, d.ultimo_ping,
+           CASE WHEN d.ultimo_ping > DATE_SUB(NOW(), INTERVAL 2 MINUTE) THEN 'online' ELSE 'offline' END AS stato_live
+    FROM dispositivi d
+    WHERE d.tenant_id = ?
+    ORDER BY d.ultimo_ping DESC
+    LIMIT 6
+");
+$stmt->execute([$tid]);
+$dispositivi = $stmt->fetchAll();
 
-$titolo = 'Dashboard';
-require_once __DIR__ . '/includes/header.php';
+// Club con conteggi
+$stmt = $db->prepare("
+    SELECT club,
+           COUNT(*) AS num_player,
+           COALESCE(SUM(numero_tv), 0) AS num_tv,
+           SUM(CASE WHEN stato = 'online' AND ultimo_ping > DATE_SUB(NOW(), INTERVAL 2 MINUTE) THEN 1 ELSE 0 END) AS player_online
+    FROM dispositivi
+    WHERE tenant_id = ?
+    GROUP BY club
+    ORDER BY club
+");
+$stmt->execute([$tid]);
+$clubs = $stmt->fetchAll();
+
+// Contenuti recenti
+$stmt = $db->prepare("SELECT id, nome, tipo, file, creato_il FROM contenuti WHERE tenant_id = ? ORDER BY creato_il DESC LIMIT 4");
+$stmt->execute([$tid]);
+$contenuti_recenti = $stmt->fetchAll();
+
+// Playlist attive
+$stmt = $db->prepare("SELECT p.id, p.nome, COUNT(pi.id) AS num_items FROM playlist p LEFT JOIN playlist_items pi ON pi.playlist_id = p.id WHERE p.tenant_id = ? GROUP BY p.id ORDER BY p.creato_il DESC LIMIT 4");
+$stmt->execute([$tid]);
+$playlists = $stmt->fetchAll();
+
+// Alert: dispositivi offline da più di 5 minuti
+$stmt = $db->prepare("
+    SELECT nome, club, ultimo_ping,
+           TIMESTAMPDIFF(MINUTE, ultimo_ping, NOW()) AS minuti_offline
+    FROM dispositivi
+    WHERE tenant_id = ? AND (stato = 'offline' OR ultimo_ping < DATE_SUB(NOW(), INTERVAL 5 MINUTE))
+    ORDER BY ultimo_ping ASC
+    LIMIT 5
+");
+$stmt->execute([$tid]);
+$alerts_offline = $stmt->fetchAll();
+
+// Contenuti in scadenza (adv con data_fine nei prossimi 3 giorni)
+$stmt = $db->prepare("
+    SELECT c.nome, pi.data_fine,
+           DATEDIFF(pi.data_fine, CURDATE()) AS giorni_rimasti
+    FROM playlist_items pi
+    JOIN contenuti c ON c.id = pi.contenuto_id
+    JOIN playlist p ON p.id = pi.playlist_id
+    WHERE p.tenant_id = ? AND pi.data_fine IS NOT NULL AND pi.data_fine BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 3 DAY)
+    ORDER BY pi.data_fine ASC
+    LIMIT 3
+");
+$stmt->execute([$tid]);
+$alerts_scadenza = $stmt->fetchAll();
+
+$tot_alerts = count($alerts_offline) + count($alerts_scadenza);
 ?>
-<div class="container">
-<div class="wgrid">
+<?php require_once __DIR__ . '/includes/head.php'; ?>
+</head>
+<body>
 
-    <!-- W1: TV attive -->
-    <div class="w glass">
-        <div class="wl">TV attive <a href="/dispositivi.php" class="wl-action">Club →</a></div>
-        <div class="bignum"><?= $tv_online ?><sub>/<?= $tv_totali ?></sub></div>
-        <div class="wsub"><?= $tv_offline ?> TV offline &middot; <?= $online_disp ?>/<?= $tot_disp ?> PixelBridge</div>
-        <div class="dp <?= $tv_offline===0?'dp-up':($tv_online>0?'dp-warn':'dp-off') ?>">
-            <?= $tv_offline===0?'↑ Tutte online':($tv_online>0?'⚠ '.$tv_offline.' TV offline':'✕ Tutte offline') ?>
+<?php require_once __DIR__ . '/includes/topnav.php'; ?>
+
+<div class="app">
+  <?php require_once __DIR__ . '/includes/sidebar.php'; ?>
+
+  <main class="main">
+
+    <!-- PAGE HEAD -->
+    <div class="page-head">
+      <div>
+        <div class="page-title">Network Overview</div>
+        <div class="page-sub">
+          Monitoraggio in tempo reale ·
+          <?php echo $tot_disp; ?> player ·
+          <?php echo count($clubs); ?> <?php echo count($clubs) === 1 ? 'sede' : 'sedi'; ?>
         </div>
-        <div class="wbar"><div class="wbar-fill <?= $tv_offline===0?'wbar-g':($tv_online>0?'wbar-y':'wbar-r') ?>"
-            style="width:<?= $tv_totali>0?round($tv_online/$tv_totali*100):0 ?>%"></div></div>
-    </div>
-
-    <!-- W2: In onda -->
-    <div class="w glass">
-        <div class="wl">In onda adesso <a href="/playlist.php" class="wl-action">Vedi →</a></div>
-        <div class="bignum"><?= $tot_cont ?><sub> file</sub></div>
-        <div class="wsub"><?= $tot_play ?> playlist &middot; <?= $tot_profili ?> profili</div>
-        <div class="dp dp-up">↑ Libreria attiva</div>
-        <div class="wbar"><div class="wbar-fill wbar-o" style="width:<?= min(100,$tot_cont*10) ?>%"></div></div>
-    </div>
-
-    <!-- W3: Disponibilità -->
-    <div class="w glass">
-        <div class="wl">Disponibilità PixelBridge</div>
-        <div class="bignum"><?= $uptime_pct ?><sub>%</sub></div>
-        <div class="wsub"><?= $online_disp ?>/<?= $tot_disp ?> dispositivi online</div>
-        <div class="dp <?= $uptime_pct>=80?'dp-up':($uptime_pct>=50?'dp-warn':'dp-off') ?>">
-            <?= $uptime_pct>=80?'✓ Ottimo':($uptime_pct>=50?'⚠ Parziale':'✕ Critico') ?>
+      </div>
+      <div class="head-actions">
+        <a href="/dispositivi.php" class="btn-ghost">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+          </svg>
+          Tutti i dispositivi
+        </a>
+        <a href="/dispositivi.php?action=pair" class="btn-primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Aggiungi dispositivo
+        </a>
+        <div class="seg">
+          <button class="seg-btn active">Live</button>
+          <button class="seg-btn">Storico</button>
         </div>
-        <div class="wbar"><div class="wbar-fill wbar-g" style="width:<?= $uptime_pct ?>%"></div></div>
+      </div>
     </div>
 
-    <!-- W4: Stato sistema -->
-    <div class="w glass <?= $offline_disp>0?'glass-o':'' ?>">
-        <div class="wl">Stato sistema</div>
-        <div class="bignum" <?= $offline_disp>0?'style="color:#FF9F6B"':'' ?>><?= $offline_disp ?></div>
-        <div class="wsub"><?= $offline_disp===0?'Nessun problema rilevato':'PixelBridge offline' ?></div>
-        <div class="dp <?= $offline_disp===0?'dp-up':'dp-warn' ?>"><?= $offline_disp===0?'✓ Tutto OK':'⚠ Verifica Club' ?></div>
-        <div class="wbar"><div class="wbar-fill <?= $offline_disp===0?'wbar-g':'wbar-r' ?>"
-            style="width:<?= $offline_disp===0?100:min(100,$offline_disp*20) ?>%"></div></div>
+    <!-- METRICS -->
+    <div class="g12">
+      <div class="card cp" style="grid-column:span 3">
+        <div class="mlabel">Dispositivi online</div>
+        <div class="mval"><?php echo $online_disp; ?></div>
+        <div class="msub">di <?php echo $tot_disp; ?> player totali</div>
+        <div class="pbar"><div class="pfill" style="width:<?php echo $uptime_pct; ?>%"></div></div>
+        <div class="pmeta"><span class="l">Uptime</span><span class="r"><?php echo $uptime_pct; ?>%</span></div>
+      </div>
+
+      <div class="card cp" style="grid-column:span 3">
+        <div class="mlabel">TV attive</div>
+        <div class="mval"><?php echo $tv_online; ?></div>
+        <div class="msub">di <?php echo $tot_tv; ?> TV totali</div>
+        <?php $tv_pct = $tot_tv > 0 ? round($tv_online / $tot_tv * 100) : 0; ?>
+        <div class="pbar"><div class="pfill" style="width:<?php echo $tv_pct; ?>%"></div></div>
+        <div class="pmeta"><span class="l">Copertura</span><span class="r"><?php echo $tv_pct; ?>%</span></div>
+      </div>
+
+      <div class="card cp" style="grid-column:span 3">
+        <div class="mlabel">Contenuti</div>
+        <div class="mval"><?php echo $tot_contenuti; ?></div>
+        <?php if ($cont_inutilizzati > 0): ?>
+        <div class="msub dn"><?php echo $cont_inutilizzati; ?> non utilizzati</div>
+        <?php else: ?>
+        <div class="msub up">Tutti in uso</div>
+        <?php endif; ?>
+        <div class="pbar"><div class="pfill" style="width:<?php echo $cont_pct; ?>%"></div></div>
+        <div class="pmeta"><span class="l">Utilizzo</span><span class="r"><?php echo $cont_pct; ?>%</span></div>
+      </div>
+
+      <div class="card cp" style="grid-column:span 3">
+        <div class="mlabel">Playlist</div>
+        <div class="mval"><?php echo $tot_playlist; ?></div>
+        <div class="msub"><?php echo $tot_alerts > 0 ? $tot_alerts . ' alert attivi' : 'Tutto regolare'; ?></div>
+        <div class="pbar"><div class="pfill" style="width:<?php echo min(100, $tot_playlist * 10); ?>%"></div></div>
+        <div class="pmeta"><span class="l">Totali</span><span class="r"><?php echo $tot_playlist; ?></span></div>
+      </div>
     </div>
 
-    <!-- W5+W6: Lista monitor -->
-    <div class="w glass w-2 w-r2" style="padding-bottom:0;">
-        <div class="wl">Monitor registrati <a href="/dispositivi.php" class="wl-action">Gestisci →</a></div>
-        <div class="slist">
+    <!-- DISPOSITIVI + ALERT -->
+    <div class="g12">
+
+      <!-- Dispositivi -->
+      <div class="card cp" style="grid-column:span 7">
+        <div class="ch">
+          <div class="ct">Dispositivi</div>
+          <a href="/dispositivi.php" class="cl">Vedi tutti →</a>
+        </div>
+
         <?php if (empty($dispositivi)): ?>
-            <div class="si"><div class="si-info"><div class="si-name" style="color:var(--sg-muted);">Nessun dispositivo</div></div></div>
-        <?php else: foreach ($dispositivi as $d):
-            $is_on = $d['stato']==='online';
-            $ping = !empty($d['ultimo_ping']) ? date('H:i',strtotime($d['ultimo_ping']) + 7200) : '—';
-            $num_tv = (int)($d['numero_tv'] ?? 0);
-        ?>
-            <div class="si">
-                <div class="sdot <?= $is_on?'sd-on':'sd-off' ?>"></div>
-                <div class="si-info">
-                    <div class="si-name"><?= htmlspecialchars($d['nome']) ?><?= $num_tv>0?' <span style="font-size:10px;color:var(--sg-muted);">📺'.$num_tv.'</span>':'' ?></div>
-                    <div class="si-meta">
-                        <?= htmlspecialchars($d['club']??'—') ?>
-                        <?= $d['profilo_nome']?' · '.htmlspecialchars($d['profilo_nome']):'' ?>
-                        · <?= $ping ?>
-                    </div>
-                </div>
-                <div class="stag <?= $is_on?'stag-on':'stag-off' ?>"><?= $is_on?'Online':'Offline' ?></div>
-            </div>
-        <?php endforeach; endif; ?>
-        </div>
-    </div>
-
-    <!-- W7: Live Preview -->
-    <div class="w glass w-r2" style="padding-bottom:0;">
-        <div class="wl">Preview live
-            <span id="live-status-pill" style="font-size:9px;background:rgba(232,80,2,0.15);color:var(--sg-orange);padding:2px 7px;border-radius:5px;font-weight:700;border:1px solid rgba(232,80,2,0.25);">● IN ONDA</span>
-        </div>
-        <select class="lp-select" id="club-select" onchange="updatePreview(this.value)">
-            <option value="">— Tutti i club —</option>
-            <?php foreach ($clubs_preview as $c): ?>
-            <option value="<?= htmlspecialchars($c['nome']) ?>">
-                <?= htmlspecialchars($c['nome']) ?><?= $c['num_tv']>0?' ('.$c['num_tv'].' TV)':'' ?>
-            </option>
-            <?php endforeach; ?>
-        </select>
-        <div class="lp-screen">
-            <div class="lp-badge" id="lp-badge">● LIVE</div>
-            <div class="lp-canvas">
-                <div class="lp-brand" id="lp-brand">ALL CLUBS</div>
-                <div class="lp-bar"></div><div class="lp-bar s"></div>
-            </div>
-        </div>
-        <div class="lp-stats">
-            <div class="lp-stat"><div class="lp-stat-k">TV online</div><div class="lp-stat-v" id="lp-tv"><?= $tv_online.'/'.$tv_totali ?></div></div>
-            <div class="lp-stat"><div class="lp-stat-k">Profilo</div><div class="lp-stat-v" id="lp-profilo">—</div></div>
-            <div class="lp-stat"><div class="lp-stat-k">Stato</div><div class="lp-stat-v" id="lp-layout">—</div></div>
-        </div>
-    </div>
-
-    <!-- W8: Anno dot grid -->
-    <div class="w glass">
-        <div class="wl">Anno <?= date('Y') ?> <span class="wl-action"><?= $anno_pct ?>%</span></div>
-        <div class="dotgrid" id="dotgrid"></div>
-        <div class="dg-num"><?= $anno_pct ?><span style="font-size:16px;font-weight:400;color:var(--sg-muted);">%</span></div>
-        <div class="dg-sub"><?= $giorno_anno ?> giorni su <?= $giorni_tot ?></div>
-    </div>
-
-    <!-- W9: Schedule oggi -->
-    <div class="w glass">
-        <div class="wl">Oggi — <?= date('l d/m') ?> <a href="/profili.php" class="wl-action">Modifica →</a></div>
-        <?php if (empty($schedule)): ?>
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">
-            <div style="font-size:28px;opacity:0.15;">📅</div>
-            <div style="font-size:12px;color:var(--sg-muted);">Nessun evento oggi</div>
-            <a href="/profili.php" style="font-size:11px;color:var(--sg-orange);text-decoration:none;">+ Aggiungi evento →</a>
+        <div class="empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          <div class="empty-title">Nessun dispositivo</div>
+          <div class="empty-sub">Aggiungi il primo player per iniziare</div>
         </div>
         <?php else: ?>
-        <div class="sched">
-        <?php foreach ($schedule as $ev):
-            $sh=8; $tot_min=14*60;
-            $ini=strtotime($ev['ora_inizio']??'00:00'); $fin=strtotime($ev['ora_fine']??'23:59');
-            $ini_m=max(0,(date('H',$ini)*60+date('i',$ini))-$sh*60);
-            $fin_m=min($tot_min,(date('H',$fin)*60+date('i',$fin))-$sh*60);
-            $l=round($ini_m/$tot_min*100); $w=max(5,round(($fin_m-$ini_m)/$tot_min*100));
-            $name=htmlspecialchars(mb_substr($ev['nome'],0,10));
+        <?php foreach ($dispositivi as $d):
+          $is_online = $d['stato_live'] === 'online';
+          $hw_label  = strtoupper($d['hw_type'] ?? 'N/D');
+          $ping_ago  = $d['ultimo_ping'] ? human_time_diff($d['ultimo_ping']) : 'Mai';
         ?>
-        <div class="slane">
-            <div class="sname"><?= $name ?></div>
-            <div class="strack">
-                <?php if($l>0): ?><div class="sblock sb-e" style="width:<?= $l ?>%"></div><?php endif; ?>
-                <div class="sblock sb-o" style="width:<?= $w ?>%"><?= $name ?></div>
-                <?php if($l+$w<100): ?><div class="sblock sb-e" style="width:<?= 100-$l-$w ?>%"></div><?php endif; ?>
+        <div class="row">
+          <div class="dot <?php echo $is_online ? 'on' : 'off'; ?>"></div>
+          <div style="flex:1">
+            <div class="rname"><?php echo htmlspecialchars($d['nome']); ?></div>
+            <div class="rsub">
+              <?php echo htmlspecialchars($d['club']); ?>
+              <?php if ($d['numero_tv']): ?> · <?php echo $d['numero_tv']; ?> TV<?php endif; ?>
+              · <?php echo $hw_label; ?>
             </div>
+          </div>
+          <span class="badge <?php echo $is_online ? 'on' : 'off'; ?>">
+            <?php echo $is_online ? 'Online' : 'Offline'; ?>
+          </span>
         </div>
         <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+
+      <!-- Alert -->
+      <div class="card cp" style="grid-column:span 5">
+        <div class="ch">
+          <div class="ct">Alert</div>
+          <?php if ($tot_alerts > 0): ?>
+          <span class="badge err"><?php echo $tot_alerts; ?> attivi</span>
+          <?php else: ?>
+          <span class="badge on">Tutto OK</span>
+          <?php endif; ?>
+        </div>
+
+        <?php foreach ($alerts_offline as $a): ?>
+        <div class="alert-row">
+          <div class="aico" style="background:var(--error-bg)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <div>
+            <div class="atitle"><?php echo htmlspecialchars($a['nome']); ?> offline</div>
+            <div class="ameta">
+              <?php echo htmlspecialchars($a['club']); ?> ·
+              Da <?php echo $a['minuti_offline']; ?> minuti
+            </div>
+          </div>
+        </div>
+        <?php endforeach; ?>
+
+        <?php foreach ($alerts_scadenza as $a): ?>
+        <div class="alert-row">
+          <div class="aico" style="background:var(--warn-bg)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div>
+            <div class="atitle">"<?php echo htmlspecialchars($a['nome']); ?>" scade
+              <?php echo $a['giorni_rimasti'] == 0 ? 'oggi' : 'tra ' . $a['giorni_rimasti'] . ' giorni'; ?>
+            </div>
+            <div class="ameta">Playlist · Aggiorna i contenuti</div>
+          </div>
+        </div>
+        <?php endforeach; ?>
+
+        <?php if ($tot_alerts === 0): ?>
+        <div class="empty" style="padding:24px">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <div class="empty-title" style="font-size:13px">Nessun alert</div>
+          <div class="empty-sub">Tutti i dispositivi funzionano correttamente</div>
         </div>
         <?php endif; ?>
+      </div>
     </div>
 
-</div><!-- /wgrid -->
+    <!-- CLUB + CONTENUTI + PLAYLIST -->
+    <div class="g12">
 
-<div class="box" style="margin-bottom:20px;">
-    <h2>⚡ Azioni rapide</h2>
-    <div class="azioni-rapide">
-        <a href="/contenuti.php" class="btn">+ Contenuto</a>
-        <a href="/playlist.php" class="btn btn-secondary">+ Playlist</a>
-        <a href="/profili.php" class="btn btn-secondary">+ Profilo</a>
-        <a href="/dispositivi.php" class="btn btn-secondary">+ PixelBridge</a>
-        <a href="/layout.php" class="btn btn-secondary">⚙ Layout</a>
-    </div>
-</div>
-
-<?php if (!empty($contenuti_recenti)): ?>
-<div class="box">
-    <h2>🕐 Caricati di recente</h2>
-    <table>
-        <thead><tr><th>Nome</th><th>Tipo</th></tr></thead>
-        <tbody>
-        <?php foreach ($contenuti_recenti as $c): ?>
-        <tr>
-            <td><?= htmlspecialchars($c['nome']) ?></td>
-            <td><?php $t=strtolower($c['tipo']??''); ?>
-                <span class="badge <?= strpos($t,'video')!==false?'badge-video':'badge-immagine' ?>"><?= htmlspecialchars($c['tipo']??'—') ?></span>
-            </td>
-        </tr>
+      <!-- Club & sedi -->
+      <div class="card cp" style="grid-column:span 3">
+        <div class="ch">
+          <div class="ct">Club & sedi</div>
+          <a href="/club.php" class="cl">Mappa →</a>
+        </div>
+        <?php if (empty($clubs)): ?>
+        <div class="empty" style="padding:20px">
+          <div class="empty-sub">Nessuna sede configurata</div>
+        </div>
+        <?php else: ?>
+        <?php foreach ($clubs as $c): ?>
+        <div class="row">
+          <div style="flex:1">
+            <div class="rname"><?php echo htmlspecialchars($c['club']); ?></div>
+            <div class="rsub"><?php echo $c['num_player']; ?> player · <?php echo $c['num_tv']; ?> TV</div>
+          </div>
+          <div style="display:flex;gap:4px">
+            <?php for ($i = 0; $i < $c['num_player']; $i++): ?>
+            <div style="width:8px;height:8px;border-radius:50%;background:<?php echo $i < $c['player_online'] ? '#22c55e' : 'var(--outline)'; ?>"></div>
+            <?php endfor; ?>
+          </div>
+        </div>
         <?php endforeach; ?>
-        </tbody>
-    </table>
-</div>
-<?php endif; ?>
+        <?php endif; ?>
+      </div>
 
-</div><!-- /container -->
-<script>
-(function(){
-    var dg=document.getElementById('dotgrid'); if(!dg) return;
-    var total=52, done=Math.round(52*<?= $anno_pct ?>/100);
-    for(var i=0;i<total;i++){var d=document.createElement('div');d.className='dg '+(i<done?'dg-on':'dg-off');dg.appendChild(d);}
-})();
-var clubsData=<?= json_encode($clubs_preview) ?>;
-function updatePreview(clubNome){
-    var brand=document.getElementById('lp-brand'),tvEl=document.getElementById('lp-tv'),
-        proEl=document.getElementById('lp-profilo'),layEl=document.getElementById('lp-layout'),
-        badge=document.getElementById('lp-badge'),pill=document.getElementById('live-status-pill');
-    if(!clubNome){
-        brand.textContent='ALL CLUBS';
-        tvEl.textContent='<?= $tv_online."/".$tv_totali ?>';
-        proEl.textContent='—'; layEl.textContent='—'; badge.textContent='● LIVE';
-        badge.className='lp-badge';
-        pill.textContent='● IN ONDA';
-        pill.style.color='var(--sg-orange)';
-        pill.style.background='rgba(232,80,2,0.15)';
-        pill.style.border='1px solid rgba(232,80,2,0.25)';
-        return;
-    }
-    var club=clubsData.find(function(c){return c.nome===clubNome;}); if(!club) return;
-    var isOn=club.online>0;
-    brand.textContent=clubNome.substring(0,10).toUpperCase();
-    tvEl.textContent=(isOn?club.num_tv:'0')+'/'+(club.num_tv||'1');
-    proEl.textContent=club.profilo||'—';
-    layEl.textContent=isOn?'Online':'Offline';
-    badge.textContent=isOn?'● LIVE':'○ OFFLINE';
-    badge.className=isOn?'lp-badge':'lp-offline-badge';
-    pill.textContent=isOn?'● IN ONDA':'○ OFFLINE';
-    pill.style.color=isOn?'var(--sg-orange)':'var(--sg-red)';
-    pill.style.background=isOn?'rgba(232,80,2,0.15)':'rgba(255,69,58,0.10)';
-    pill.style.border=isOn?'1px solid rgba(232,80,2,0.25)':'1px solid rgba(255,69,58,0.20)';
-}
-setTimeout(function(){window.location.reload();},60000);
-</script>
+      <!-- Contenuti recenti -->
+      <div class="card cp" style="grid-column:span 5">
+        <div class="ch">
+          <div class="ct">Contenuti recenti</div>
+          <a href="/contenuti.php" class="cl">Gestisci →</a>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+          <?php foreach ($contenuti_recenti as $c): ?>
+          <a href="/contenuti.php?id=<?php echo $c['id']; ?>" style="aspect-ratio:16/9;background:var(--surface-low);border-radius:8px;border:1px solid var(--outline-var);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;transition:all .15s;text-decoration:none" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--outline-var)'">
+            <?php if ($c['tipo'] === 'immagine' && $c['file']): ?>
+            <img src="/uploads/<?php echo htmlspecialchars($c['file']); ?>" style="width:100%;height:100%;object-fit:cover" alt="">
+            <?php else: ?>
+            <div style="font-size:10px;font-weight:500;color:var(--on-variant);text-align:center;padding:6px;line-height:1.4">
+              <?php echo htmlspecialchars(substr($c['nome'], 0, 20)); ?>
+            </div>
+            <?php endif; ?>
+          </a>
+          <?php endforeach; ?>
+          <?php if (count($contenuti_recenti) < 4): ?>
+          <a href="/contenuti.php?action=upload" style="aspect-ratio:16/9;background:var(--surface-low);border-radius:8px;border:1px dashed var(--outline-var);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;text-decoration:none;color:var(--outline)" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--outline-var)'">
+            <span style="font-size:22px;font-weight:300">+</span>
+          </a>
+          <?php endif; ?>
+        </div>
+      </div>
+
+      <!-- Playlist -->
+      <div class="card cp" style="grid-column:span 4">
+        <div class="ch">
+          <div class="ct">Playlist</div>
+          <a href="/playlist.php" class="cl">Gestisci →</a>
+        </div>
+        <?php if (empty($playlists)): ?>
+        <div class="empty" style="padding:20px">
+          <div class="empty-sub">Nessuna playlist creata</div>
+        </div>
+        <?php else: ?>
+        <?php
+        $colors = ['var(--blue)', 'var(--violet)', 'var(--success-dim)', 'var(--warn)'];
+        foreach ($playlists as $i => $p):
+          $col = $colors[$i % count($colors)];
+        ?>
+        <div class="row">
+          <div style="width:6px;height:6px;border-radius:2px;background:<?php echo $col; ?>;flex-shrink:0"></div>
+          <div style="flex:1">
+            <div class="rname"><?php echo htmlspecialchars($p['nome']); ?></div>
+            <div class="rsub"><?php echo $p['num_items']; ?> contenuti</div>
+          </div>
+          <span class="badge blue">Attiva</span>
+        </div>
+        <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
+<?php
+
+function human_time_diff(string $datetime): string {
+  $diff = time() - strtotime($datetime);
+  if ($diff < 60)   return $diff . 's fa';
+  if ($diff < 3600) return round($diff/60) . ' min fa';
+  if ($diff < 86400) return round($diff/3600) . 'h fa';
+  return round($diff/86400) . 'g fa';
+}
+?>

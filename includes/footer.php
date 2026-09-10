@@ -1,66 +1,43 @@
-<?php
-$php_maj   = PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;
-$mem_used  = round(memory_get_usage(true)/1024/1024,1);
-$mem_peak  = round(memory_get_peak_usage(true)/1024/1024,1);
-$uptime_f  = sys_get_temp_dir().'/signage_start';
-if(!file_exists($uptime_f)){file_put_contents($uptime_f,time());}
-$up_sec    = time()-(int)file_get_contents($uptime_f);
-$up_str    = $up_sec<3600 ? round($up_sec/60).'m' : round($up_sec/3600,1).'h';
-$ud        = __DIR__.'/../uploads';
-$ud_size   = 0;
-if(is_dir($ud)){foreach(new RecursiveIteratorIterator(new RecursiveDirectoryIterator($ud,FilesystemIterator::SKIP_DOTS)) as $f){$ud_size+=$f->getSize();}}
-$ud_mb     = round($ud_size/1024/1024,1);
-$db_kb     = '—';
-try{$dp=__DIR__.'/../database.sqlite';if(file_exists($dp))$db_kb=round(filesize($dp)/1024,1).' KB';}catch(Exception $e){}
-?>
-
-</div><!-- /sg-content -->
-</div><!-- /sg-body -->
-
-<!-- ══ STATUSBAR ══════════════════════════════════════════ -->
-<footer class="statusbar">
-    <div class="sb-brand">PIXEL<span>BRIDGE</span></div>
-    <div class="sb-sep"></div>
-    <div class="sb-item"><div class="sb-dot sb-dot-ok"></div>PHP <b><?= $php_maj ?></b></div>
-    <div class="sb-sep"></div>
-    <div class="sb-item">RAM <b><?= $mem_used ?> MB</b><span class="sb-sub">/ <?= $mem_peak ?> pk</span></div>
-    <div class="sb-sep"></div>
-    <div class="sb-item">Upload <b><?= $ud_mb ?> MB</b></div>
-    <div class="sb-sep"></div>
-    <div class="sb-item">DB <b><?= $db_kb ?></b></div>
-    <div class="sb-sep"></div>
-    <div class="sb-item">Sessione <b><?= $up_str ?></b></div>
-    <div class="sb-ticker">
-        SISTEMA OPERATIVO &nbsp;·&nbsp; TUTTI I MODULI ATTIVI &nbsp;·&nbsp;
-        <?= date('d/m/Y H:i') ?> &nbsp;·&nbsp; PIXELBRIDGE SIGNAGE MANAGER &nbsp;·&nbsp;
-    </div>
-</footer>
-
-</div><!-- /sg-app -->
-
+<!-- includes/footer.php -->
 <script>
-(function(){
-    function pad(n){return String(n).padStart(2,'0');}
-    function tick(){
-        var el=document.getElementById('sg-clock');
-        if(!el)return;
-        var n=new Date();
-        el.textContent=pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds());
-    }
-    setInterval(tick,1000); tick();
-})();
+// ── Theme ────────────────────────────────────────────────────
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.classList.contains('dark');
+  html.classList.toggle('dark', !isDark);
+  html.classList.toggle('light', isDark);
+  localStorage.setItem('pb_theme', isDark ? 'light' : 'dark');
+  updateThemeIcon();
+}
 
-(function(){
-    var t = 30;
-    var el = document.getElementById('sg-api-countdown');
-    if (!el) return;
-    setInterval(function(){
-        t--;
-        if (t <= 0) t = 30;
-        el.textContent = t + 's';
-        el.style.color = t <= 5 ? 'var(--sg-green)' : 'var(--sg-orange)';
-    }, 1000);
-})();
+function updateThemeIcon() {
+  const isDark = document.documentElement.classList.contains('dark');
+  const icon = document.getElementById('theme-icon');
+  if (!icon) return;
+  icon.innerHTML = isDark
+    ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+    : '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
+}
+updateThemeIcon();
+
+// ── Sidebar mobile ───────────────────────────────────────────
+function toggleSidebar() {
+  const s = document.getElementById('sidebar');
+  const o = document.getElementById('sidebar-overlay');
+  if (!s) return;
+  const open = s.classList.toggle('open');
+  if (o) o.style.display = open ? 'block' : 'none';
+}
+
+// ── Segmented controls ───────────────────────────────────────
+document.querySelectorAll('.seg').forEach(seg => {
+  seg.querySelectorAll('.seg-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      seg.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+});
 </script>
 </body>
 </html>
