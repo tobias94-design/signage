@@ -831,13 +831,51 @@ function renderWidget(layerEl, layer, scale, brand) {
         video.style.cssText = 'width:100%;height:100%;object-fit:contain';
         video.autoplay = true; video.muted = true; video.playsInline = true;
         el.appendChild(video);
-        if (Hls.isSupported()) {
-          const hls = new Hls();
-          hls.loadSource(cfg.url);
-          hls.attachMedia(video);
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = cfg.url;
+
+        let hlsInstance = null;
+        let lastTime = -1;
+        let stallCount = 0;
+
+        function avviaStream() {
+          if (hlsInstance) {
+            try { hlsInstance.destroy(); } catch(e) {}
+            hlsInstance = null;
+          }
+          if (Hls.isSupported()) {
+            hlsInstance = new Hls({
+              maxBufferLength: 30,
+              maxMaxBufferLength: 60,
+              liveSyncDurationCount: 3
+            });
+            hlsInstance.loadSource(cfg.url);
+            hlsInstance.attachMedia(video);
+            hlsInstance.on(Hls.Events.ERROR, function(event, data) {
+              if (data.fatal) {
+                console.log('HLS errore fatale, riavvio stream:', data.type);
+                setTimeout(avviaStream, 3000);
+              }
+            });
+          } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = cfg.url;
+          }
         }
+
+        avviaStream();
+
+        setInterval(function() {
+          if (video.currentTime === lastTime && !video.paused) {
+            stallCount++;
+            console.log('Streaming: possibile freeze, tentativo', stallCount);
+            if (stallCount >= 3) {
+              console.log('Streaming: freeze confermato, riavvio HLS');
+              stallCount = 0;
+              avviaStream();
+            }
+          } else {
+            stallCount = 0;
+          }
+          lastTime = video.currentTime;
+        }, 10000);
       }
       break;
     }
