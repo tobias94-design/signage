@@ -36,7 +36,7 @@ Sub Main()
         mouse_enabled: false
         focus_enabled: true
         javascript_enabled: true
-        url: "file:///sd:/index.html"
+        url: "SD:/index.html"
         storage_path: "SD:"
         storage_quota: 1073741824
         hwz_default: "on"
@@ -72,12 +72,12 @@ Sub Main()
             If data.reason = "load-error" Or data.reason = "crash" Then
                 print "PixelBridge v1: errore widget, ricarico tra 10s"
                 Sleep(10000)
-                htmlWidget.LoadURL("file:///sd:/index.html")
+                htmlWidget.LoadURL("SD:/index.html")
             End If
 
         Else If Type(msg) = "roTimerEvent" Then
             print "PixelBridge v1: reload anti-freeze programmato"
-            htmlWidget.LoadURL("file:///sd:/index.html")
+            htmlWidget.LoadURL("SD:/index.html")
         End If
 
     End While
