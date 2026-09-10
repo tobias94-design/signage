@@ -68,6 +68,7 @@ let lastLayersSnapshot = null; // rileva modifiche ai layer anche senza cambio d
 let sidebarTimers = {};
 let clockTimer = null;
 let advPollTimers = {};   // un timer di polling per ogni layer ADV nel template
+let streamWatchdogTimers = {}; // un watchdog per ogni layer streaming nel template
 let advOverlayEl = null;  // overlay fullscreen condiviso, creato una sola volta
 let imgRotateTimers = {}; // un timer di rotazione per ogni widget Immagine con piu' foto
 let CAPTURE_DEVICE = ''; // nome (o parte del nome) della capture card configurata per questo dispositivo
@@ -290,6 +291,53 @@ function startTvWatchdog(el) {
   }, 5000);
 }
 
+// ── Watchdog streaming IPTV: stesso pattern del watchdog TV. Se il video
+// resta fermo per 30s di fila, o HLS.js segnala un errore fatale, si
+// ricrea l'istanza da zero. Il timer si autodistrugge se il layer non e'
+// piu' nel DOM (cambio template) per evitare che interferisca con altri
+// layer (es. l'overlay ADV fullscreen).
+function startStreamWithWatchdog(el, layer, video, url) {
+  const layerId = layer.id;
+  if (streamWatchdogTimers[layerId]) { clearInterval(streamWatchdogTimers[layerId]); }
+
+  let hlsInstance = null;
+  let lastTime = -1;
+  let stallCount = 0;
+
+  function avviaStream() {
+    if (!el.isConnected) return;
+    if (hlsInstance) { try { hlsInstance.destroy(); } catch(e) {} hlsInstance = null; }
+    if (Hls.isSupported()) {
+      hlsInstance = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60, liveSyncDurationCount: 3 });
+      hlsInstance.loadSource(url);
+      hlsInstance.attachMedia(video);
+      hlsInstance.on(Hls.Events.ERROR, function(event, data) {
+        if (data.fatal) setTimeout(avviaStream, 3000);
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+    }
+  }
+
+  avviaStream();
+
+  streamWatchdogTimers[layerId] = setInterval(() => {
+    if (!el.isConnected) {
+      clearInterval(streamWatchdogTimers[layerId]);
+      delete streamWatchdogTimers[layerId];
+      if (hlsInstance) { try { hlsInstance.destroy(); } catch(e) {} }
+      return;
+    }
+    if (video.currentTime === lastTime && !video.paused) {
+      stallCount++;
+      if (stallCount >= 3) { stallCount = 0; avviaStream(); }
+    } else {
+      stallCount = 0;
+    }
+    lastTime = video.currentTime;
+  }, 10000);
+}
+
 // ── Rendering del template ──────────────────────────────────────
 function renderTemplate(data) {
   // Ferma timer sidebar e ADV precedenti
@@ -298,6 +346,8 @@ function renderTemplate(data) {
   if (clockTimer) clearInterval(clockTimer);
   Object.values(advPollTimers).forEach(t=>clearTimeout(t));
   advPollTimers = {};
+  Object.values(streamWatchdogTimers).forEach(t=>clearInterval(t));
+  streamWatchdogTimers = {};
   advOverlayEl = null; // il nodo verra' distrutto da stage.innerHTML='' qui sotto: azzero il riferimento
   Object.values(imgRotateTimers).forEach(t=>clearInterval(t));
   imgRotateTimers = {};
@@ -831,51 +881,7 @@ function renderWidget(layerEl, layer, scale, brand) {
         video.style.cssText = 'width:100%;height:100%;object-fit:contain';
         video.autoplay = true; video.muted = true; video.playsInline = true;
         el.appendChild(video);
-
-        let hlsInstance = null;
-        let lastTime = -1;
-        let stallCount = 0;
-
-        function avviaStream() {
-          if (hlsInstance) {
-            try { hlsInstance.destroy(); } catch(e) {}
-            hlsInstance = null;
-          }
-          if (Hls.isSupported()) {
-            hlsInstance = new Hls({
-              maxBufferLength: 30,
-              maxMaxBufferLength: 60,
-              liveSyncDurationCount: 3
-            });
-            hlsInstance.loadSource(cfg.url);
-            hlsInstance.attachMedia(video);
-            hlsInstance.on(Hls.Events.ERROR, function(event, data) {
-              if (data.fatal) {
-                console.log('HLS errore fatale, riavvio stream:', data.type);
-                setTimeout(avviaStream, 3000);
-              }
-            });
-          } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = cfg.url;
-          }
-        }
-
-        avviaStream();
-
-        setInterval(function() {
-          if (video.currentTime === lastTime && !video.paused) {
-            stallCount++;
-            console.log('Streaming: possibile freeze, tentativo', stallCount);
-            if (stallCount >= 3) {
-              console.log('Streaming: freeze confermato, riavvio HLS');
-              stallCount = 0;
-              avviaStream();
-            }
-          } else {
-            stallCount = 0;
-          }
-          lastTime = video.currentTime;
-        }, 10000);
+        startStreamWithWatchdog(el, layer, video, cfg.url);
       }
       break;
     }
