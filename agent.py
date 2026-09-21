@@ -5,7 +5,7 @@ Pairing + heartbeat + cache locale + server HTTP locale.
 Chrome viene lanciato dal bat.
 """
 
-import os, sys, json, time, random, socket, subprocess, threading
+import os, sys, json, time, random, socket, subprocess, threading, string
 import urllib.request, urllib.parse, shutil, tempfile
 import ssl, http.server, socketserver
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -222,7 +222,11 @@ def close_screen():
 # FIX: do_pairing iterativo invece di ricorsivo (evita stack overflow)
 def do_pairing():
     while True:
-        code    = str(random.randint(100000, 999999))
+        # Stesso set di caratteri usato per BrightSign: niente 0/O/1/I/L,
+        # facili da confondere quando l'operatore li legge sulla TV e li
+        # digita a mano nel pannello admin.
+        PAIRING_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+        code    = ''.join(random.choices(PAIRING_CHARS, k=8))
         machine = get_machine_name()
         log(f"Pairing: codice {code} per {machine}")
         res = api_get(f'/api/claim.php?action=register&code={code}&machine={urllib.parse.quote(machine)}')
