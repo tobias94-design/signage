@@ -231,7 +231,7 @@ def do_pairing():
         log(f"Pairing: codice {code} per {machine}")
         res = api_get(f'/api/claim.php?action=register&code={code}&machine={urllib.parse.quote(machine)}')
         if not res.get('ok'):
-            log(f"Errore registrazione — riprovo tra 30s")
+            log(f"Errore registrazione: {res.get('error', 'sconosciuto')} — riprovo tra 30s")
             time.sleep(30)
             continue
 
