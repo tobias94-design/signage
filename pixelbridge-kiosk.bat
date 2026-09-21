@@ -32,7 +32,7 @@ if not exist "%~dp0token.txt" (
 )
 :: Leggi token dal file
 set /p TOKEN=<"%~dp0token.txt"
-set "DISPLAY_URL=https://pixelbridge.it/player/display.php?token=!TOKEN!"
+set "DISPLAY_URL=https://pixelbridge.it/player/display_v2.php?token=!TOKEN!"
 echo [OK] Token: !TOKEN! >> "%~dp0kiosk.log"
 echo [OK] URL: !DISPLAY_URL! >> "%~dp0kiosk.log"
 :: ── NASCONDI TASKBAR ────────────────────────────────────────

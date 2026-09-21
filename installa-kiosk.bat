@@ -189,9 +189,7 @@ pause
 :: Apre la pagina di test camera di Chrome (non richiede server)
 start "" "!CHROME!" ^
     --user-data-dir="%~dp0chrome-profile" ^
-    --unsafely-treat-insecure-origin-as-secure=http://204.168.161.116 ^
-    --allow-http-screen-capture ^
-    "http://204.168.161.116/player/display.php"
+    "https://pixelbridge.it/player/display_v2.php"
 
 echo.
 echo  Chrome e' aperto. Autorizza la fotocamera e chiudi Chrome.
