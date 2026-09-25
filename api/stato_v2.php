@@ -38,6 +38,13 @@ $tenantId = (int)$dispositivo['tenant_id'];
 // Aggiorna ultimo ping (heartbeat)
 $db->prepare("UPDATE dispositivi SET ultimo_ping = NOW() WHERE id = ?")->execute([$dispositivo['id']]);
 
+// Ricarica richiesta dal pannello (pulsante "Ricarica" in dispositivi.php):
+// flag one-shot, letto e azzerato subito cosi' non ricarica in loop.
+$reloadRichiesto = (bool)$dispositivo['reload_richiesto'];
+if ($reloadRichiesto) {
+    $db->prepare("UPDATE dispositivi SET reload_richiesto = 0 WHERE id = ?")->execute([$dispositivo['id']]);
+}
+
 // ── Trova il template assegnato ───────────────────────────────
 if (empty($dispositivo['template_id'])) {
     echo json_encode([
@@ -107,6 +114,7 @@ $club_data = $stmt->fetch();
 // ── Risposta ─────────────────────────────────────────────────
 echo json_encode([
     'ok' => true,
+    'reload' => $reloadRichiesto,
     'dispositivo' => [
         'nome' => $dispositivo['nome'],
         'club' => $dispositivo['club'],

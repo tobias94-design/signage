@@ -120,6 +120,7 @@ $map_json = json_encode(array_values(array_map(fn($c) => [
 <style>
 /* Map */
 #map { height: 380px; border-radius: 0; overflow: hidden; z-index: 1; background: #1a1a2e; }
+#map.dark-tiles .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9); }
 .leaflet-popup-content-wrapper { border-radius: 10px !important; box-shadow: 0 4px 20px rgba(0,0,0,.15) !important; }
 .map-popup { font-family: 'Inter', sans-serif; font-size: 13px; }
 .map-popup-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; color: #0d0d14; }
@@ -464,18 +465,17 @@ const isDark  = document.documentElement.classList.contains('dark');
 
 const map = L.map('map', { zoomControl: true, preferCanvas: true });
 
-// Tile layers — dark/light
-const darkTile  = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '© OpenStreetMap © CARTO', maxZoom: 19, subdomains: 'abcd'
+// Tile layer — OpenStreetMap standard, gratuito e senza API key.
+// Il tema scuro e' simulato con un filtro CSS (vedi #map.dark-tiles
+// nello style sopra), non con un secondo set di tile a pagamento.
+const osmTile = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 19, subdomains: 'abc'
 });
-const lightTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  attribution: '© OpenStreetMap © CARTO', maxZoom: 19, subdomains: 'abcd'
-});
+osmTile.addTo(map);
 
 function applyTile() {
   const dark = document.documentElement.classList.contains('dark');
-  if (dark) { lightTile.remove(); darkTile.addTo(map); }
-  else       { darkTile.remove(); lightTile.addTo(map); }
+  document.getElementById('map').classList.toggle('dark-tiles', dark);
 }
 applyTile();
 setTimeout(() => map.invalidateSize(), 200);

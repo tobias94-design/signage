@@ -31,6 +31,7 @@ $token = $_GET['token'] ?? '';
   @keyframes tickerScrollRTL { 0% { left:100%; } 100% { left:-100%; } }
   @keyframes fadeIn { from{opacity:0} to{opacity:1} }
   @keyframes neonPulse { 0%,100% { filter:brightness(1); } 50% { filter:brightness(1.3); } }
+  @keyframes livePulse { 0%,100% { box-shadow: inset 0 0 0 0 rgba(255,255,255,0); } 50% { box-shadow: inset 0 0 20px -4px var(--live-pulse-color, rgba(247,25,46,.35)); } }
   @keyframes flapIn { 0% { transform:rotateX(-90deg); opacity:0; } 60% { transform:rotateX(12deg); opacity:1; } 100% { transform:rotateX(0deg); opacity:1; } }
   .flap-tile{display:inline-flex;align-items:center;justify-content:center;position:relative;border-radius:3px;font-family:'Space Mono',monospace;font-weight:700;text-transform:uppercase;transform-origin:center;animation:flapIn .4s ease backwards}
   .flap-tile::after{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(0,0,0,.5)}
@@ -185,6 +186,10 @@ async function loadState() {
     const res = await fetch(API_URL);
     const data = await res.json();
     if (!data.ok) { showStatus('Errore', data.error||''); return; }
+
+    // Ricarica richiesta dal pannello (pulsante "Ricarica" in dispositivi.php)
+    if (data.reload) { window.location.reload(); return; }
+
     if (!data.template) { showStatus('Nessun template assegnato', data.messaggio||''); return; }
 
     hideStatus();
@@ -756,8 +761,43 @@ function renderWidget(layerEl, layer, scale, brand) {
       const testoUnico = testi.length ? testi.join('   ·   ') : '';
       el.style.background = cfg.bg_ticker || '#F7192E';
       el.style.display='flex'; el.style.alignItems='center';
-      const speed = Math.max(1.5, 400/(cfg.velocita||60));
-      el.innerHTML = `<div style="font-size:${Math.round((cfg.font_size||20)*scale)}px;color:${cfg.text_color||'#fff'};font-weight:600;white-space:nowrap;position:absolute;left:0;animation:tickerScrollRTL ${speed}s linear infinite">${testoUnico}</div>`;
+      el.style.position = 'relative';
+      el.style.overflow = 'hidden';
+
+      const inner = document.createElement('div');
+      inner.style.cssText = `font-size:${Math.round((cfg.font_size||20)*scale)}px;color:${cfg.text_color||'#fff'};font-weight:600;white-space:nowrap;position:absolute;left:100%;top:50%;transform:translateY(-50%)`;
+      inner.textContent = testoUnico;
+      el.innerHTML = '';
+      el.appendChild(inner);
+
+      // FIX: la vecchia animazione (tickerScrollRTL, left:100%->-100%) percorreva
+      // sempre 2x la larghezza del CONTENITORE, non del testo — con testo lungo
+      // lo scroll veniva tagliato e ripartiva da capo a meta' corsa.
+      // Ora misuriamo la larghezza reale del testo e generiamo un'animazione
+      // dedicata (per layer) con distanza = contenitore + testo, cosi' il giro
+      // finisce sempre dopo aver mostrato tutte le notizie per intero.
+      requestAnimationFrame(() => {
+        const containerW = el.clientWidth || 0;
+        const textW = inner.scrollWidth || 0;
+        if (!textW) return;
+        // Velocita' derivata dalla formula storica del ticker (400/velocita
+        // secondi per percorrere 2 larghezze di contenitore) invece di un
+        // valore fisso in px/sec — quel valore fisso, su testi lunghi
+        // migliaia di px, produceva animazioni da 400+ secondi (praticamente
+        // ferme, percepite come "bloccate" a meta' testo).
+        const pxPerSec = Math.max(5, containerW * (cfg.velocita||60) / 200);
+        const distance = containerW + textW;
+        const duration = Math.max(4, distance / pxPerSec);
+        const animName = `tickerScrollFix_${layer.id || 'x'}`;
+        let styleTag = document.getElementById('style_'+animName);
+        if (!styleTag) {
+          styleTag = document.createElement('style');
+          styleTag.id = 'style_'+animName;
+          document.head.appendChild(styleTag);
+        }
+        styleTag.textContent = `@keyframes ${animName} { 0% { left:${containerW}px; } 100% { left:-${textW}px; } }`;
+        inner.style.animation = `${animName} ${duration}s linear infinite`;
+      });
       break;
     }
 
@@ -1201,14 +1241,21 @@ function buildCorsiMarkup(corsi, cfg, scale) {
   }
   return `<div style="width:100%;height:100%;padding:${Math.round(10*scale)}px;overflow:hidden">
     <div style="font-size:${Math.round(16*scale)}px;font-weight:700;color:${titoloColor};margin-bottom:${Math.round(6*scale)}px">${cfg.titolo||'In programma oggi'}</div>
-    ${corsi.map(c=>`
-    <div style="display:flex;align-items:center;gap:${Math.round(10*scale)}px;padding:${Math.round(16*scale)}px ${Math.round(4*scale)}px;border-bottom:1px solid rgba(255,255,255,.1);${c.stato==='attivo'?`background:${hexToRgba(badgeColor,0.08)};border-left:3px solid ${badgeColor};padding-left:${Math.round(6*scale)}px;`:''}${c.stato==='passato'?'opacity:.35;':''}">
-      ${cols.includes('ora')?`<span style="font-size:${Math.round(fsCorso*0.65)}px;font-weight:600;color:${c.stato==='attivo'?badgeColor:orarioColor};min-width:${Math.round(fsCorso*1.8)}px;letter-spacing:1px">${c.ora}</span>`:''}
+    ${corsi.map(c=>{
+      const isLive = c.stato==='attivo';
+      const oraSlot = isLive && showBadge
+        ? `<span style="display:inline-flex;align-items:center;gap:${Math.round(5*scale)}px;font-size:${Math.round(fsCorso*0.6)}px;font-weight:800;color:${badgeColor};letter-spacing:1px;min-width:${Math.round(fsCorso*1.9)}px">
+             <span style="width:${Math.round(8*scale)}px;height:${Math.round(8*scale)}px;border-radius:50%;background:${badgeColor};display:inline-block;flex-shrink:0;animation:neonPulse 1.4s ease-in-out infinite"></span>${badgeTxt}
+           </span>`
+        : `<span style="font-size:${Math.round(fsCorso*0.9)}px;font-weight:600;color:${orarioColor};min-width:${Math.round(fsCorso*1.9)}px;letter-spacing:1px">${c.ora}</span>`;
+      return `
+    <div style="--live-pulse-color:${hexToRgba(badgeColor,.35)};display:flex;align-items:center;gap:${Math.round(10*scale)}px;padding:${Math.round(16*scale)}px ${Math.round(4*scale)}px;border-bottom:1px solid rgba(255,255,255,.1);${isLive?`background:${hexToRgba(badgeColor,0.08)};border-left:3px solid ${badgeColor};padding-left:${Math.round(6*scale)}px;animation:livePulse 1.8s ease-in-out infinite;`:''}${c.stato==='passato'?'opacity:.35;':''}">
+      ${cols.includes('ora')?oraSlot:''}
       ${cols.includes('corso')?`<span style="font-size:${fsCorso}px;font-weight:700;color:${corsoColor};text-transform:uppercase;letter-spacing:${Math.round(0.5*scale)}px;flex:1">${c.corso}</span>`:''}
-      ${c.stato==='attivo'&&showBadge?`<span style="font-size:${Math.round(8*scale)}px;font-weight:700;color:#fff;background:${badgeColor};padding:1px ${Math.round(5*scale)}px;border-radius:8px;letter-spacing:.5px">${badgeTxt}</span>`:''}
       ${cols.includes('istruttore')?`<span style="font-size:${Math.round(10*scale)}px;color:rgba(255,255,255,.5)">${c.istruttore}</span>`:''}
       ${cols.includes('sala')?`<span style="font-size:${Math.round(9*scale)}px;color:rgba(255,255,255,.4)">${c.sala}</span>`:''}
-    </div>`).join('')}
+    </div>`;
+    }).join('')}
   </div>`;
 }
 
